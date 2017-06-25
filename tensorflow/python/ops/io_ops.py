@@ -482,3 +482,26 @@ class IdentityReader(ReaderBase):
 
 
 ops.NotDifferentiable("IdentityReader")
+
+
+class HDF5Reader(ReaderBase):
+  """A Reader that outputs rows from datasets inside an HDF5 file.
+
+  For each dataset, the numbers in a row will be separated with ',', for separating
+  columns ';' is used and for separating the individual datasets ':' is used.
+  See ReaderBase for supported methods.
+  """
+  # TODO(azrael417): Support serializing and restoring state.
+
+  def __init__(self, datasets, name=None):
+    """Create an HDF5Reader.
+
+    Args:
+      datasets: A ':'-separated list of datasets to read from (at least one is required).
+      name: A name for the operation (optional).
+    """
+    rr = gen_io_ops._hdf5_reader(datasets=datasets,name=name)
+    super(Hdf5Reader, self).__init__(rr)
+
+
+ops.NotDifferentiable("HDF5Reader")

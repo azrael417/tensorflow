@@ -581,6 +581,31 @@ shared_name: If non-empty, this reader is named in the given bucket
              with this shared_name. Otherwise, the node name is used instead.
 )doc");
 
+
+#ifdef TENSORFLOW_USE_HDF5
+REGISTER_OP("HDF5Reader")
+    .Output("reader_handle: resource")
+    .Attr("container: string = ''")
+    .Attr("shared_name: string = ''")
+    .Attr("datasets: string")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::ScalarShape)
+    .Doc(R"doc(
+A Reader that outputs the queued work as both the key and value.
+
+To use, enqueue strings in a Queue.  ReaderRead will take the front
+work string and output (work, work).
+
+reader_handle: The handle to reference the Reader.
+container: If non-empty, this reader is placed in the given container.
+        Otherwise, a default container is used.
+shared_name: If non-empty, this reader is named in the given bucket
+             with this shared_name. Otherwise, the node name is used instead.
+datasets: Provide a :-separated list of datasets to read from. The Reader will output one row for each of
+        the specified datasets at a time.
+)doc");
+#endif
+
 // Ops that operate on Readers ------------------------------------------------
 
 REGISTER_OP("ReaderRead")
