@@ -868,11 +868,63 @@ if [ "$TF_NEED_MPI" == "1" ]; then
         sed -i -e "s/MPI_LIB_IS_OPENMPI=True/MPI_LIB_IS_OPENMPI=False/" third_party/mpi/mpi.bzl
  fi
 
-  
   if [ -e "${MPI_HOME}/lib/libmpi.so" ]; then
     ln -sf "${MPI_HOME}/lib/libmpi.so" third_party/mpi/
   else
     echo "Cannot find the MPI library file in ${MPI_HOME}/lib "
+    exit 1
+  fi
+fi
+
+
+# Find out where HDF5 is installed
+while [ "$TF_NEED_HDF5" == "" ]; do
+  read -p "Do you wish to build TensorFlow with "\
+"HDF5 support? [y/N] " INPUT
+  case $INPUT in
+    [Yy]* ) echo "HDF5 support will be enabled for "\
+"TensorFlow"; TF_NEED_HDF5=1;;
+    [Nn]* ) echo "HDF5 support will not be enabled for "\
+"TensorFlow"; TF_NEED_HDF5=0;;
+    "" ) echo "HDF5 support will not be enabled for "\
+"TensorFlow"; TF_NEED_HDF5=0;;
+    * ) echo "Invalid selection: " $INPUT;;
+  esac
+done
+
+# Find out where the MPI toolkit is installed
+while true; do
+    if [ "$TF_NEED_HDF5" == "0" ]; then
+        break;
+    fi
+
+    fromuser=""
+    if [ -z "$HDF5_DIR" ]; then
+        echo "Please specify the HDF5_DIR."
+    fi
+
+    #Check that the include and library folders are where we expect them to be
+    if [ -e "${HDF5_HOME}/include" ] && [ -e "${HDF5_DIR}/lib" ]; then
+        break
+    fi
+    echo "Invalid path to HDF5. ${HDF5_DIR}/include or ${HDF5_DIR}/lib cannot be found."
+    
+    # Retry
+    HDF5_DIR="" 
+done
+    
+    
+if [ "$TF_NEED_HDF5" == "1" ]; then
+  write_to_bazelrc 'build --define with_hdf5_support=true'
+
+  #Link the MPI header files
+  ln -sf "${HDF5_DIR}/include/hdf5.h" third_party/hdf5/hdf5.h
+  
+  #link hdf5 library
+  if [ -e "${HDF5_DIR}/lib/libhdf5.so" ]; then
+    ln -sf "${HDF5_DIR}/lib/libhdf5.so" third_party/hdf5/
+  else
+    echo "Cannot find the HDF5 library file in ${HDF5_DIR}/lib "
     exit 1
   fi
 fi
