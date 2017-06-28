@@ -903,16 +903,15 @@ while true; do
     fromuser=""
     if [ -z "$HDF5_DIR" ]; then
         echo "Please specify the HDF5_DIR."
+        exit 1
     fi
 
     #Check that the include and library folders are where we expect them to be
-    if [ -e "${HDF5_HOME}/include" ] && [ -e "${HDF5_DIR}/lib" ]; then
+    if [ -e "${HDF5_DIR}/include" ] && [ -e "${HDF5_DIR}/lib" ]; then
         break
     fi
     echo "Invalid path to HDF5. ${HDF5_DIR}/include or ${HDF5_DIR}/lib cannot be found."
-    
-    # Retry
-    HDF5_DIR="" 
+    exit 1
 done
     
     
