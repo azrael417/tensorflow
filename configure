@@ -919,7 +919,9 @@ if [ "$TF_NEED_HDF5" == "1" ]; then
   write_to_bazelrc 'build --define with_hdf5_support=true'
 
   #Link the MPI header files
-  ln -sf "${HDF5_DIR}/include/hdf5.h" third_party/hdf5/hdf5.h
+  for headerfile in $(ls ${HDF5_DIR}/include/*.h); do
+      ln -sf "${headerfile}" third_party/hdf5/$(basename ${headerfile})
+  done
   
   #link hdf5 library
   if [ -e "${HDF5_DIR}/lib/libhdf5.so" ]; then
