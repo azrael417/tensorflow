@@ -14,3 +14,8 @@ def hdf5_hdr():
 def hdf5_libs():
     libs = ["libhdf5.so"]
     return libs
+    
+def hdf5_flags():
+    flags = ["-DTENSORFLOW_USE_HDF5"]
+    return flags
+

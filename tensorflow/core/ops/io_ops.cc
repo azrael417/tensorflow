@@ -582,7 +582,7 @@ shared_name: If non-empty, this reader is named in the given bucket
 )doc");
 
 
-//#ifdef TENSORFLOW_USE_HDF5
+#ifdef TENSORFLOW_USE_HDF5
 REGISTER_OP("HDF5Reader")
     .Output("reader_handle: resource")
     .Attr("container: string = ''")
@@ -604,7 +604,7 @@ shared_name: If non-empty, this reader is named in the given bucket
 datasets: Provide a :-separated list of datasets to read from. The Reader will output one row for each of
         the specified datasets at a time.
 )doc");
-//#endif
+#endif
 
 // Ops that operate on Readers ------------------------------------------------
 
