@@ -176,6 +176,12 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
+config_setting(
+    name = "with_hdf5_support",
+    values = {"define": "with_hdf5_support=true"},
+    visibility = ["//visibility:public"],
+)
+
 package_group(
     name = "internal",
     packages = ["//tensorflow/..."],
