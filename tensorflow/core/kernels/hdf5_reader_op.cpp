@@ -21,7 +21,7 @@ limitations under the License.
 #include "tensorflow/core/lib/core/errors.h"
 
 //specific stuff
-#include "hdf5.h"
+#include <hdf5.h>
 #include "tensorflow/core/lib/strings/str_util.h"
 
 #include <sys/stat.h>

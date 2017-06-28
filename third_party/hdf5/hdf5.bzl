@@ -11,10 +11,6 @@ def hdf5_hdr():
     hdrs = [ "hdf5.h" ]
     return hdrs
 
-def hdf5_flags():
-    flags = ["TENSORFLOW_USE_HDF5"]
-    return flags
-
 def hdf5_libs():
     libs = ["libhdf5.so","libz.so"]
     return libs

@@ -266,3 +266,9 @@ def tf_additional_mpi_lib_defines():
       "//tensorflow:with_mpi_support": ["TENSORFLOW_USE_MPI"],
       "//conditions:default": [],
   })
+
+def tf_additional_hdf5_lib_defines():
+  return select({
+      "//tensorflow:with_hdf5_support": ["TENSORFLOW_USE_HDF5"],
+      "//conditions:default": [],
+  })

@@ -112,6 +112,7 @@ load(
     "tf_lib_proto_parsing_deps",
     "tf_additional_verbs_lib_defines",
     "tf_additional_mpi_lib_defines",
+    "tf_additional_hdf5_lib_defines",
 )
 load(
     "//tensorflow/core:platform/default/build_config_root.bzl",
