@@ -868,12 +868,14 @@ if [ "$TF_NEED_MPI" == "1" ]; then
         sed -i -e "s/MPI_LIB_IS_OPENMPI=True/MPI_LIB_IS_OPENMPI=False/" third_party/mpi/mpi.bzl
  fi
 
-  if [ -e "${MPI_HOME}/lib/libmpi.so" ]; then
-    ln -sf "${MPI_HOME}/lib/libmpi.so" third_party/mpi/
-  else
-    echo "Cannot find the MPI library file in ${MPI_HOME}/lib "
-    exit 1
-  fi
+ if [ -e "${MPI_HOME}/lib/libmpi.so" ]; then
+   ln -sf "${MPI_HOME}/lib/libmpi.so" third_party/mpi/
+ elif [ -e "${MPI_HOME}/lib/libmpich.so" ]; then
+   ln -sf "${MPI_HOME}/lib/libmpich.so" third_party/mpi/
+ else
+   echo "Cannot find the MPI library file in ${MPI_HOME}/lib "
+   exit 1
+ fi
 fi
 
 

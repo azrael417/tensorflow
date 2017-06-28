@@ -2,13 +2,22 @@
 #based on the configuration options return one or the other
 
 def mpi_hdr():
-    MPI_LIB_IS_OPENMPI=True
+    MPI_LIB_IS_OPENMPI=False
     hdrs = []    
     if MPI_LIB_IS_OPENMPI:
         hdrs = ["mpi.h", "mpi_portable_platform.h"]   #When using OpenMPI
     else:
         hdrs = ["mpi.h",  "mpio.h", "mpicxx.h"]        #When using MVAPICH
     return hdrs
+
+def mpi_lib():
+    MPI_LIB_IS_OPENMPI=False
+    lib=None
+    if MPI_LIB_IS_OPENMPI:
+        lib="libmpi.so"   							#When using OpenMPI
+    else:
+        lib="libmpich.so"        #When using MVAPICH
+    return [lib]
 
 def if_mpi(if_true, if_false = []):
     return select({
