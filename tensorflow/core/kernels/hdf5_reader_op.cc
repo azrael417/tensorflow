@@ -53,11 +53,8 @@ namespace tensorflow {
     class HDF5Reader : public ReaderBase {
     public:
         HDF5Reader(const string& node_name, const string& dataset_namestring, Env* env)
-            : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")),
-        env_(env),
-        hdf5_env_(nullptr),
-        row_num_(0),
-        num_rows_(0) {
+        : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")), 
+        env_(env), hdf5_env_(0), row_num_(0), num_rows_(0) {
             //split dataset_namestring at ':' and store in vector:
             hdf5_dset_names_ = str_util::Split(dataset_namestring, ":", str_util::SkipEmpty());
         }
@@ -108,15 +105,13 @@ namespace tensorflow {
             for(unsigned i=1; i<hdf5_dset_dims_.size(); ++i){
                 CHECK_LT(num_rows_, hdf5_dset_dims_[i][0]) << "Error, datasets " << hdf5_dset_names_[0] <<  " and " << hdf5_dset_names_[i] << " do not have the same extents in axis 0.";
             }
-            //do not cache more rows than available
-            num_rows_cached_ = min(num_rows_, num_rows_cached_);
             
             //initialize input buffers:
-            for(unsigned i=1; i<hdf5_dset_dims_.size(); ++i){
+            for(unsigned i=0; i<hdf5_dset_dims_.size(); ++i){
                 unsigned int size = 1;
                 for(unsigned int d=1; d<hdf5_dset_dims_[i].size(); d++) size *= hdf5_dset_dims_[i][d];
                 float* tmpbuf = new float[size];
-                hdf5_dset_buffers_[i].push_back(tmpbuf);
+                hdf5_dset_buffers_.push_back(tmpbuf);
             }
             
             return Status::OK();
@@ -124,7 +119,7 @@ namespace tensorflow {
 
 
         Status OnWorkFinishedLocked() override {
-            if (hdf5_env_ != nullptr) {
+            if (hdf5_env_ > 0) {
                 //close everything which is currently open
                 herr_t err=1;
                 unsigned int types=H5F_OBJ_DATASET | H5F_OBJ_GROUP | H5F_OBJ_DATATYPE | H5F_OBJ_ATTR;
@@ -150,13 +145,12 @@ namespace tensorflow {
                 err = H5Fclose(hdf5_env_);
                 num_rows_ = 0;
                 row_num_ = 0;
-                num_rows_cached_ = 128;
                 hdf5_dset_names_.clear();
                 hdf5_dset_ids_.clear();
                 hdf5_dset_memids_.clear();
                 hdf5_dset_dims_.clear();
                 hdf5_dset_buffers_.clear();
-                hdf5_env_ = nullptr;
+                hdf5_env_ = 0;
             }
             return Status::OK();
         }
@@ -164,7 +158,7 @@ namespace tensorflow {
 
         string ReadRow(const unsigned int& dset_index){
             //vector arrays
-            std::vector<hsize_t> start(hdf5_dset_dims_[dset_index_].size()), count(hdf5_dset_dims_[dset_index_].size());
+            std::vector<hsize_t> start(hdf5_dset_dims_[dset_index].size()), count(hdf5_dset_dims_[dset_index].size());
             
             //set hyperslab parameters
             start[0] = row_num_;
@@ -180,17 +174,17 @@ namespace tensorflow {
             HDF5_CHECK_OK(hslab_mem,"cannot create memory space.");
             
             //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, hid_t xfer_plist_id, hdf5_dset_buffers_[dset_index_]),"cannot read row "+std::to_string(row_num_)+" from dataset "+hdf5_dset_names_[dset_index]|+".");
+            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, hid_t xfer_plist_id, hdf5_dset_buffers_[dset_index]),"cannot read row "+std::to_string(row_num_)+" from dataset "+hdf5_dset_names_[dset_index]|+".");
             
             //create output string
-            result='';
-            const int run = 0;
+            string result="";
+            int run = 0;
             //skip first dimension because this is n-sample dimension
             for(unsigned int d=1; d<hdf5_dset_dims_[dset_index].size(); ++d){
-                result += to_string(hdf5_dset_buffers_[dset_index_][run]);
+                result += to_string(hdf5_dset_buffers_[dset_index][run]);
                 run++;
                 for(unsigned int i=1; i<hdf5_dset_dims_[dset_index][d].size(); ++i){
-                    result += ','+to_string(hdf5_dset_buffers_[dset_index_][run]);
+                    result += ','+to_string(hdf5_dset_buffers_[dset_index][run]);
                     run++;
                 }
                 result += ";";
@@ -256,7 +250,7 @@ namespace tensorflow {
                         errors::InvalidArgument("please provide a (list of) dataset name(s) to load from"));
             Env* env = context->env();
             SetReaderFactory([this, dataset_namestring, env]() {
-                return new HDF5Reader(name(), env);
+                return new HDF5Reader(name(), dataset_namestring, env);
             });
         }
     };
