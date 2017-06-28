@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifdef TENSORFLOW_USE_HDF5
+//#ifdef TENSORFLOW_USE_HDF5
 
 //standard stuff
 #include "tensorflow/core/framework/reader_op_kernel.h"
@@ -265,4 +265,4 @@ namespace tensorflow {
 
 }
 
-#endif
+//#endif

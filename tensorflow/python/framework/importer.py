@@ -450,7 +450,7 @@ def import_graph_def(graph_def, input_map=None, return_elements=None,
                            'WholeFileReader', 'TextLineReader',
                            'FixedLengthRecordReader',
                            'TFRecordReader', 'IdentityReader',
-                           'LMDBReader',
+                           'LMDBReader', 'HDF5Reader', 
                            'RefSwitch', 'RefEnter', 'RefNextIteration',
                            'RefMerge', 'RefIdentity']:
               pass

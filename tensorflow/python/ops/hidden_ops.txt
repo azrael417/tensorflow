@@ -192,6 +192,7 @@ TextLineReaderV2
 TFRecordReaderV2
 WholeFileReaderV2
 LMDBReader
+HDF5Reader
 
 # linalg_ops
 BatchCholesky

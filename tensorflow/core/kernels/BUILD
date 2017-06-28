@@ -1914,7 +1914,10 @@ cc_library(
         ":text_line_reader_op",
         ":tf_record_reader_op",
         ":whole_file_read_ops",
-    ] + if_hdf5([":hdf5_reader_op"]),
+        ":hdf5_reader_op",
+    ] 
+    
+#+ if_hdf5([":hdf5_reader_op"]),
 )
 
 IO_DEPS = [

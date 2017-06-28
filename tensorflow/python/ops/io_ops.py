@@ -501,7 +501,7 @@ class HDF5Reader(ReaderBase):
       name: A name for the operation (optional).
     """
     rr = gen_io_ops._hdf5_reader(datasets=datasets,name=name)
-    super(Hdf5Reader, self).__init__(rr)
+    super(HDF5Reader, self).__init__(rr)
 
 
 ops.NotDifferentiable("HDF5Reader")
