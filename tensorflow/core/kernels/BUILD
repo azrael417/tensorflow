@@ -1960,7 +1960,9 @@ tf_kernel_library(
 tf_kernel_library(
     name = "hdf5_reader_op",
     prefix = "hdf5_reader_op",
-    deps = IO_DEPS,
+    deps = IO_DEPS + [
+          "//third_party/hdf5",
+          ],
 )
 
 tf_kernel_library(

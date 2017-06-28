@@ -12,5 +12,5 @@ def hdf5_hdr():
     return hdrs
 
 def hdf5_libs():
-    libs = ["libhdf5.so","libz.so"]
+    libs = ["libhdf5.so"]
     return libs
