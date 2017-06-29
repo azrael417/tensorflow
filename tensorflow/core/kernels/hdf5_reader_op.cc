@@ -177,20 +177,20 @@ namespace tensorflow {
             HDF5_CHECK_OK(mem_space,"cannot create memory space.");
             
             //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),"cannot read row "+std::to_string(row_num_)+" from dataset "+hdf5_dset_names_[dset_index]+".");
+            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
             
             //create output string
             string result="";
             int run = 0;
             //skip first dimension because this is n-sample dimension
             for(unsigned int d=1; d<hdf5_dset_dims_[dset_index].size(); ++d){
-                result += to_string(hdf5_dset_buffers_[dset_index][run]);
+                result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][run]);
                 run++;
                 for(unsigned int i=1; i<hdf5_dset_dims_[dset_index][d]; ++i){
-                    result += ','+to_string(hdf5_dset_buffers_[dset_index][run]);
+                    result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][run]);
                     run++;
                 }
-                result += ";";
+                result = strings::StrCat(result, ";");
             }
             return result;
         }
@@ -206,15 +206,14 @@ namespace tensorflow {
             //not at end of file? produce the key
             string keystring = hdf5_dset_names_[0];
             for(unsigned int i=1; i<hdf5_dset_names_.size(); ++i){
-                keystring +=  ":" + hdf5_dset_names_[i];
+                keystring = strings::StrCat(keystring, ":", hdf5_dset_names_[i]);
             }
-            keystring += '@' + current_work();
-            *key = strings::StrCat(keystring, ":", row_num_);
+            *key = strings::StrCat(keystring, "@", current_work(), ":", row_num_);
             
             //now take care of value
             *value = ReadRow(0);
             for(unsigned int i=1; i<hdf5_dset_names_.size(); i++){
-                *value += ":" + ReadRow(i);
+                *value = strings::StrCat(*value, ":", ReadRow(i));
             }
             
             //increase row number

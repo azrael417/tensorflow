@@ -20,7 +20,7 @@ load("//third_party/hdf5:hdf5.bzl", "if_hdf5")
 cc_library(
     name = "hdf5",
     srcs = if_hdf5(hdf5_libs()),
-    hdrs = if_hdf5(hdf5_hdr()),
+    hdrs = if_hdf5(glob(hdf5_hdr())),
     copts = if_hdf5(hdf5_flags()),
     visibility = ["//visibility:public"],
     deps = [

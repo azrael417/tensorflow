@@ -8,7 +8,7 @@ def if_hdf5(if_true, if_false = []):
     })
     
 def hdf5_hdr():
-    hdrs = [ "hdf5.h" ]
+    hdrs = [ "*.h" ]
     return hdrs
 
 def hdf5_libs():
