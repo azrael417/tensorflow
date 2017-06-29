@@ -57,15 +57,19 @@ namespace tensorflow {
         env_(env), hdf5_env_(0), row_num_(0), num_rows_(0) {
             //split dataset_namestring at ':' and store in vector:
             hdf5_dset_names_ = str_util::Split(dataset_namestring, ":", str_util::SkipEmpty());
+            plist_id_ = H5Pcreate(H5P_DATASET_XFER);
         }
-
+        
+        ~HDF5Reader(){
+            H5Pclose(plist_id_);
+        }
 
         Status OnWorkStartedLocked() override {
             //check if file is actually and hdf5 file:
             HDF5_CHECK_FILE_EXISTS(H5Fis_hdf5(current_work().c_str()));
             //survived that call? try opening it in readonly mode
             unsigned int flags = H5F_ACC_RDONLY;
-            hdf5_env_ = H5Open(current_work().c_str(),flags,H5P_DEFAULT);
+            hdf5_env_ = H5Fopen(current_work().c_str(),flags,H5P_DEFAULT);
             HDF5_CHECK_FILE(hdf5_env_);
 
             //what should follow now is to see if the datasets we want to read are actually there,
@@ -82,7 +86,7 @@ namespace tensorflow {
                 HDF5_CHECK_OBJECT_IS_DATASET(object_info);
                 
                 //open the dataset and push handle into a list
-                hid_t dsetid = H5DOpen(hdf5_env_, hdf5_dset_names_[i].c_str(), H5P_DEFAULT);
+                hid_t dsetid = H5Dopen(hdf5_env_, hdf5_dset_names_[i].c_str(), H5P_DEFAULT);
                 HDF5_CHECK_OK(dsetid,"cannot open dataset " + hdf5_dset_names_[i]);
                 hdf5_dset_ids_.push_back(dsetid);
                 
@@ -121,8 +125,7 @@ namespace tensorflow {
         Status OnWorkFinishedLocked() override {
             if (hdf5_env_ > 0) {
                 //close everything which is currently open
-                herr_t err=1;
-                unsigned int types=H5F_OBJ_DATASET | H5F_OBJ_GROUP | H5F_OBJ_DATATYPE | H5F_OBJ_ATTR;
+                unsigned int types = H5F_OBJ_DATASET | H5F_OBJ_GROUP | H5F_OBJ_DATATYPE | H5F_OBJ_ATTR;
 
                 //get number of objects still open:
                 ssize_t num_open = H5Fget_obj_count(hdf5_env_,types);
@@ -130,7 +133,7 @@ namespace tensorflow {
                     std::vector<hid_t> open_object_ids(num_open, 0); 
                     H5Fget_obj_ids(hdf5_env_, types, num_open, &(open_object_ids.front()) ); 
                     for(unsigned int i=0; i<num_open; ++i){
-                        err = H5Oclose(open_object_ids[i]);
+                        H5Oclose(open_object_ids[i]);
                     }
                 }
                 
@@ -142,7 +145,7 @@ namespace tensorflow {
                 }
                 
                 //close file and reset everything
-                err = H5Fclose(hdf5_env_);
+                H5Fclose(hdf5_env_);
                 num_rows_ = 0;
                 row_num_ = 0;
                 hdf5_dset_names_.clear();
@@ -163,18 +166,18 @@ namespace tensorflow {
             //set hyperslab parameters
             start[0] = row_num_;
             count[0] = 1;
-            for(unsigned int i=0; i<hdf5_dset_dims_[dset_index].size(); ++i){
+            for(unsigned int i=1; i<hdf5_dset_dims_[dset_index].size(); ++i){
                 start[i] = 0;
-                count[i] = hdf5_dset_dims_[dset_index];
+                count[i] = hdf5_dset_dims_[dset_index][i];
             }
             //select the slab, backup the old one
             hid_t file_space = hdf5_dset_memids_[dset_index];
-            HDF5_CHECK_OK(HDF5_CHECK_OK(H5Sselect_hyperslab(&file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL), "file-hyperslab for dataset " + hdf5_dset_names_[dset_index]+".");
+            HDF5_CHECK_OK(H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL), "file-hyperslab for dataset " + hdf5_dset_names_[dset_index]+".");
             hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(hdf5_dset_dims_[dset_index].size()), hdf5_dset_dims_[dset_index].data(), NULL);
-            HDF5_CHECK_OK(hslab_mem,"cannot create memory space.");
+            HDF5_CHECK_OK(mem_space,"cannot create memory space.");
             
             //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, hid_t xfer_plist_id, hdf5_dset_buffers_[dset_index]),"cannot read row "+std::to_string(row_num_)+" from dataset "+hdf5_dset_names_[dset_index]|+".");
+            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),"cannot read row "+std::to_string(row_num_)+" from dataset "+hdf5_dset_names_[dset_index]+".");
             
             //create output string
             string result="";
@@ -183,13 +186,12 @@ namespace tensorflow {
             for(unsigned int d=1; d<hdf5_dset_dims_[dset_index].size(); ++d){
                 result += to_string(hdf5_dset_buffers_[dset_index][run]);
                 run++;
-                for(unsigned int i=1; i<hdf5_dset_dims_[dset_index][d].size(); ++i){
+                for(unsigned int i=1; i<hdf5_dset_dims_[dset_index][d]; ++i){
                     result += ','+to_string(hdf5_dset_buffers_[dset_index][run]);
                     run++;
                 }
                 result += ";";
             }
-            
             return result;
         }
 
@@ -202,7 +204,7 @@ namespace tensorflow {
             }
             
             //not at end of file? produce the key
-            string keystring = hdf5_dset_names[0];
+            string keystring = hdf5_dset_names_[0];
             for(unsigned int i=1; i<hdf5_dset_names_.size(); ++i){
                 keystring +=  ":" + hdf5_dset_names_[i];
             }
@@ -238,6 +240,7 @@ namespace tensorflow {
         std::vector< std::vector<hsize_t> > hdf5_dset_dims_;
         std::vector<float*> hdf5_dset_buffers_;
         unsigned int row_num_, num_rows_;
+        hid_t plist_id_;
     };
 
     class HDF5ReaderOp : public ReaderOpKernel {
