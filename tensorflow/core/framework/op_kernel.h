@@ -682,7 +682,7 @@ class OpKernelContext {
   void forward_ref_input_to_ref_output(int input_index, int output_index);
 
   // Returns true when an alias to input[input_index], reshaped to output_shape,
-  // which is is safe to use for in-place computation was written to *output.
+  // which is safe to use for in-place computation was written to *output.
   // Returns false if input[input_index] has a refcount greater than one, or if
   // its type does not match the expected output type of output[output_index],
   // or the number of elements in input[input_index] does not equal the number
@@ -722,7 +722,7 @@ class OpKernelContext {
       StringPiece output_name, const TensorShape& output_shape,
       Tensor** output) TF_MUST_USE_RESULT;
 
-  // Tries to reuse one of of the inputs given in input_indices as a temporary.
+  // Tries to reuse one of the inputs given in input_indices as a temporary.
   // If none of the given inputs can be forwarded, calls
   // allocate_temp() to allocate a new temporary buffer.
   Status forward_input_or_allocate_temp(

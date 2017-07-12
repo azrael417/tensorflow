@@ -102,7 +102,7 @@ void ConvertMapToVector(const std::unordered_map<int, string>& in,
                         std::vector<string>* out) {
   CHECK_NOTNULL(out);
   out->resize(in.size());
-  for (int i = 0; i < in.size(); ++i) {
+  for (size_t i = 0; i < in.size(); ++i) {
     CHECK(in.count(i) > 0);
     out->at(i) = in.at(i);
   }
@@ -988,7 +988,7 @@ RemoteFusedGraphExecuteUtils::BuildRemoteFusedGraphExecuteOpNode(
   for (const string& output : outputs) {
     const TensorId output_tid = ParseTensorName(output);
     const string output_name = output_tid.first.ToString();
-    for (int i = 0; i < border_outputs.size(); ++i) {
+    for (size_t i = 0; i < border_outputs.size(); ++i) {
       const TensorId subgraph_output_tid =
           ParseTensorName(border_outputs.at(i));
       const string& subgraph_output_name = subgraph_output_tid.first.ToString();
@@ -1035,7 +1035,7 @@ RemoteFusedGraphExecuteUtils::BuildRemoteFusedGraphExecuteOpNode(
   TF_RETURN_IF_ERROR(RemoteFusedGraphExecuteUtils::ClusterizeNodes(
       subgraph_nodes, input_graph_def, &ci_vec));
 
-  for (int i = 0; i < ci_vec.size(); ++i) {
+  for (size_t i = 0; i < ci_vec.size(); ++i) {
     const string remote_fused_graph_node_name =
         strings::StrCat(remote_fused_graph_node_name_prefix, "/", i);
     TF_RETURN_IF_ERROR(FuseCluster(input_graph_def, inputs, outputs,
@@ -1074,7 +1074,7 @@ RemoteFusedGraphExecuteUtils::BuildRemoteFusedGraphExecuteOpNode(
   for (NodeDef& node_def : *graph_def->mutable_node()) {
     string attr_str;
     TensorId tid;
-    for (int i = 0; i < inputs.size(); ++i) {
+    for (size_t i = 0; i < inputs.size(); ++i) {
       if (IsSameNodeName(node_def, inputs.at(i), &tid)) {
         AppendDeliminator(&attr_str);
         attr_str += BuildNodeTypeAttr(RemoteFusedGraphExecuteInfo::GRAPH_INPUT,
@@ -1082,7 +1082,7 @@ RemoteFusedGraphExecuteUtils::BuildRemoteFusedGraphExecuteOpNode(
                                       remote_fused_graph_node_name);
       }
     }
-    for (int i = 0; i < outputs.size(); ++i) {
+    for (size_t i = 0; i < outputs.size(); ++i) {
       if (IsSameNodeName(node_def, outputs.at(i), &tid)) {
         AppendDeliminator(&attr_str);
         attr_str += BuildNodeTypeAttr(RemoteFusedGraphExecuteInfo::GRAPH_OUTPUT,
@@ -1095,14 +1095,14 @@ RemoteFusedGraphExecuteUtils::BuildRemoteFusedGraphExecuteOpNode(
         attr_str += BuildNodeTypeAttr(RemoteFusedGraphExecuteInfo::FUSED_NODE);
       }
     }
-    for (int i = 0; i < border_inputs.size(); ++i) {
+    for (size_t i = 0; i < border_inputs.size(); ++i) {
       if (IsSameNodeName(node_def, border_inputs.at(i), &tid)) {
         AppendDeliminator(&attr_str);
         attr_str += BuildNodeTypeAttr(RemoteFusedGraphExecuteInfo::BORDER_INPUT,
                                       tid.second, i);
       }
     }
-    for (int i = 0; i < border_outputs.size(); ++i) {
+    for (size_t i = 0; i < border_outputs.size(); ++i) {
       if (IsSameNodeName(node_def, border_outputs.at(i), &tid)) {
         AppendDeliminator(&attr_str);
         attr_str += BuildNodeTypeAttr(
@@ -1278,6 +1278,69 @@ RemoteFusedGraphExecuteUtils::FuseRemoteGraphByPlacedArguments(
     }
   }
   return true;
+}
+
+/* static */ Status RemoteFusedGraphExecuteUtils::CopyByteArrayToTensor(
+    const void* src_ptr, const int src_size, Tensor* tensor) {
+  CHECK(tensor->TotalBytes() >= src_size)
+      << tensor->TotalBytes() << ", " << src_size;
+  void* dst_ptr;
+  switch (tensor->dtype()) {
+    case DT_FLOAT:
+      dst_ptr = tensor->flat<float>().data();
+      break;
+    case DT_DOUBLE:
+      dst_ptr = tensor->flat<double>().data();
+      break;
+    case DT_INT32:
+      dst_ptr = tensor->flat<int32>().data();
+      break;
+    case DT_UINT8:
+      dst_ptr = tensor->flat<uint8>().data();
+      break;
+    case DT_INT16:
+      dst_ptr = tensor->flat<int16>().data();
+      break;
+    case DT_INT8:
+      dst_ptr = tensor->flat<int8>().data();
+      break;
+    case DT_STRING:
+      dst_ptr = tensor->flat<string>().data();
+      break;
+    case DT_INT64:
+      dst_ptr = tensor->flat<int64>().data();
+      break;
+    case DT_BOOL:
+      dst_ptr = tensor->flat<bool>().data();
+      break;
+    case DT_QINT8:
+      dst_ptr = tensor->flat<qint8>().data();
+      break;
+    case DT_QUINT8:
+      dst_ptr = tensor->flat<quint8>().data();
+      break;
+    case DT_QINT32:
+      dst_ptr = tensor->flat<qint32>().data();
+      break;
+    case DT_BFLOAT16:
+      dst_ptr = tensor->flat<bfloat16>().data();
+      break;
+    case DT_QINT16:
+      dst_ptr = tensor->flat<qint16>().data();
+      break;
+    case DT_QUINT16:
+      dst_ptr = tensor->flat<quint16>().data();
+      break;
+    case DT_UINT16:
+      dst_ptr = tensor->flat<uint16>().data();
+      break;
+    default:
+      CHECK(false) << "type " << tensor->dtype() << " is not supported.";
+      break;
+  }
+  CHECK_NOTNULL(dst_ptr);
+  std::memcpy(dst_ptr, src_ptr, src_size);
+  return Status::OK();
 }
 
 /* static */ Status RemoteFusedGraphExecuteUtils::ReplaceInputNodeByPlaceHolder(
