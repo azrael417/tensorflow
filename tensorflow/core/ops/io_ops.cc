@@ -590,7 +590,7 @@ REGISTER_OP("HDF5Reader")
     .Output("reader_handle: resource")
     .Attr("container: string = ''")
     .Attr("shared_name: string = ''")
-    .Attr("datasets: string")
+    .Attr("datasets: list(string) = []")
     .SetIsStateful()
     .SetShapeFn(shape_inference::ScalarShape)
     .Doc(R"doc(
@@ -604,7 +604,7 @@ container: If non-empty, this reader is placed in the given container.
         Otherwise, a default container is used.
 shared_name: If non-empty, this reader is named in the given bucket
              with this shared_name. Otherwise, the node name is used instead.
-datasets: Provide a :-separated list of datasets to read from. The Reader will output one row for each of
+datasets: Provide a list of dataset-names to read from. The Reader will output one row for each of
         the specified datasets at a time.
 )doc");
 #endif

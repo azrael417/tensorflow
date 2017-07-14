@@ -501,7 +501,7 @@ class HDF5Reader(ReaderBase):
     """Create an HDF5Reader.
 
     Args:
-      datasets: A ':'-separated list of datasets to read from (at least one is required).
+      datasets: A list of dataset-names to read from (at least one is required).
       name: A name for the operation (optional).
     """
     rr = gen_io_ops._hdf5_reader(datasets=datasets,name=name)

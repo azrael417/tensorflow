@@ -52,11 +52,8 @@ namespace tensorflow {
     
     class HDF5Reader : public ReaderBase {
     public:
-        HDF5Reader(const string& node_name, const string& dataset_namestring, Env* env)
-        : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")), 
-        env_(env), hdf5_env_(0), row_num_(0), num_rows_(0) {
-            //split dataset_namestring at ':' and store in vector:
-            hdf5_dset_names_ = str_util::Split(dataset_namestring, ":", str_util::SkipEmpty());
+        HDF5Reader(const string& node_name, std::vector<string> datasets, Env* env) : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")), 
+        env_(env), hdf5_env_(0), hdf5_dset_names_(datasets), row_num_(0), num_rows_(0) {
             plist_id_ = H5Pcreate(H5P_DATASET_XFER);
         }
         
@@ -246,13 +243,13 @@ namespace tensorflow {
     public:
         explicit HDF5ReaderOp(OpKernelConstruction* context)
         : ReaderOpKernel(context) {
-            string dataset_namestring = "";
-            OP_REQUIRES_OK(context, context->GetAttr("datasets", &dataset_namestring));
-            OP_REQUIRES(context, dataset_namestring != "",
+            std::vector<string> datasets;
+            OP_REQUIRES_OK(context, context->GetAttr("datasets", &datasets));
+            OP_REQUIRES(context, datasets.size() > 0,
                         errors::InvalidArgument("please provide a (list of) dataset name(s) to load from"));
             Env* env = context->env();
-            SetReaderFactory([this, dataset_namestring, env]() {
-                return new HDF5Reader(name(), dataset_namestring, env);
+            SetReaderFactory([this, datasets, env]() {
+                return new HDF5Reader(name(), datasets, env);
             });
         }
     };
