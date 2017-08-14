@@ -3,11 +3,7 @@
 
 def mpi_hdr():
     MPI_LIB_IS_OPENMPI=False
-    hdrs = []    
-    if MPI_LIB_IS_OPENMPI:
-        hdrs = ["mpi.h", "mpi_portable_platform.h"]   #When using OpenMPI
-    else:
-        hdrs = ["mpi.h",  "mpio.h", "mpicxx.h"]        #When using MVAPICH
+    hdrs = [ "*.h" ]
     return hdrs
 
 def mpi_lib():

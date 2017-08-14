@@ -873,7 +873,10 @@ def set_other_mpi_vars(environ_cp):
   """Set other MPI related variables."""
   # Link the MPI header files
   mpi_home = environ_cp.get('MPI_HOME')
-  symlink_force('%s/include/mpi.h' % mpi_home, 'third_party/mpi/mpi.h')
+  
+  for filename in os.listdir('%s/include' % mpi_home):
+    if(filename.endswith(".h")):
+      symlink_force('{}/include/{}'.format(mpi_home,filename), 'third_party/mpi/{}'.format(filename))
 
   # Determine if we use OpenMPI or MVAPICH, these require different header files
   # to be included here to make bazel dependency checker happy

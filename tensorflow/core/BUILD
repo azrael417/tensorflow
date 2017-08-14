@@ -116,16 +116,13 @@ load(
     "tf_lib_proto_parsing_deps",
     "tf_additional_verbs_lib_defines",
     "tf_additional_mpi_lib_defines",
-<<<<<<< HEAD
     "tf_additional_hdf5_lib_defines",
-=======
     "tf_additional_gdr_lib_defines",
     "tf_additional_gpu_tracer_srcs",
     "tf_additional_gpu_tracer_deps",
     "tf_additional_gpu_tracer_cuda_deps",
     "tf_pyclif_proto_library",
     "tf_jspb_proto_library",
->>>>>>> origin/master
 )
 load(
     "//tensorflow/core:platform/default/build_config_root.bzl",
@@ -1336,17 +1333,13 @@ cc_library(
         "platform/tracing.h",
     ],
     copts = tf_copts(),
-    defines = tf_additional_lib_defines() + [
-                  "SNAPPY",
-<<<<<<< HEAD
-              ] + tf_additional_verbs_lib_defines()
+    defines = tf_additional_lib_defines() + ["SNAPPY",] 
+              + tf_additional_verbs_lib_defines()
               + tf_additional_hdf5_lib_defines()
-              + tf_additional_mpi_lib_defines(),
-=======
-              ] + tf_additional_verbs_lib_defines() +
-              tf_additional_mpi_lib_defines() +
-              tf_additional_gdr_lib_defines(),
->>>>>>> origin/master
+              + tf_additional_mpi_lib_defines()
+              + tf_additional_verbs_lib_defines() 
+              + tf_additional_mpi_lib_defines() 
+              + tf_additional_gdr_lib_defines(),
     linkopts = select({
         "//tensorflow:freebsd": [],
         "//tensorflow:windows": [],
