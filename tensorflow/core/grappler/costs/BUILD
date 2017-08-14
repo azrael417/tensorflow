@@ -14,9 +14,16 @@ filegroup(
     visibility = ["//tensorflow:__subpackages__"],
 )
 
+filegroup(
+    name = "graph_properties_testdata",
+    srcs = glob(["graph_properties_testdata/*.pbtxt"]),
+    visibility = ["//visibility:public"],
+)
+
 load(
     "//tensorflow/core:platform/default/build_config.bzl",
     "tf_proto_library",
+    "tf_additional_all_protos",
 )
 load(
     "@local_config_cuda//cuda:build_defs.bzl",
@@ -27,9 +34,7 @@ tf_proto_library(
     name = "op_performance_data",
     srcs = ["op_performance_data.proto"],
     cc_api_version = 2,
-    protodeps = [
-        "//tensorflow/core:protos_all",
-    ],
+    protodeps = tf_additional_all_protos(),
     visibility = ["//visibility:public"],
 )
 
@@ -54,18 +59,22 @@ cc_test(
     size = "small",
     srcs = ["graph_properties_test.cc"],
     args = ["--heap_check=local"],  # The GPU tracer leaks memory
+    data = [":graph_properties_testdata"],
     deps = [
         ":graph_properties",
         "//tensorflow/cc:cc_ops",
         "//tensorflow/cc:scope",
         "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
         "//tensorflow/core:lib_proto_parsing",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:tensor_testutil",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core/grappler:grappler_item",
         "//tensorflow/core/grappler/clusters:single_machine",
         "//tensorflow/core/grappler/inputs:trivial_test_graph_input_yielder",
+        "//tensorflow/core/grappler/inputs:utils",
     ],
 )
 
@@ -196,6 +205,7 @@ cc_test(
         ":virtual_placer",
         ":virtual_scheduler",
         "//tensorflow/cc:cc_ops",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:tensorflow",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
@@ -232,6 +242,7 @@ cc_library(
         ":cost_estimator",
         ":op_performance_data_cc",
         "//tensorflow/core:framework",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core/grappler/clusters:utils",
         "//third_party/eigen3",
     ],
@@ -265,6 +276,7 @@ cc_library(
         ":virtual_scheduler",
         "//tensorflow/core:core_cpu_base",
         "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core/grappler:grappler_item",
     ],
 )

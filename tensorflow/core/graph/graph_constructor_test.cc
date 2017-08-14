@@ -21,6 +21,7 @@ limitations under the License.
 #include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/node_def_builder.h"
 #include "tensorflow/core/framework/shape_inference.h"
+#include "tensorflow/core/framework/versions.pb.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/node_builder.h"
 #include "tensorflow/core/kernels/ops_util.h"
@@ -1871,25 +1872,29 @@ TEST_F(GraphConstructorTest, ImportGraphDef_ControlDepsWithCycle) {
   // new_input
   opts.input_map[TensorId("new_input", 0)] = TensorId("input", 0);
 
-  // ImportGraphDef only allows backedges into merge nodes (since backedges are
-  // only expected in while loops)
+  // ImportGraphDef only allows backedges into merge nodes that are part of
+  // while loops (since backedges are only expected in while loops)
   ExpectOK(
       R"EOF(
       node { name: 'new_input' op: 'TestInput' }
-      node { name: 'merge' op: 'Merge' input: [ 'new_input:0', 't1:0' ]
+      node { name: 'merge' op: 'Merge' input: [ 'new_input:0', 'next:0' ]
              attr { key: "N" value: { i: 2 } }
              attr { key: "T" value: { type: DT_FLOAT } } }
       node { name: 't1' op: 'TestMul' input: [ 'merge:0', 'merge:0' ] }
+      node { name: 'next' op: 'NextIteration' input: ['t1:0']
+             attr { key: "T" value: { type: DT_FLOAT } } }
       )EOF",
       opts, &refiner);
 
   EXPECT_TRUE(HasNode("new_input"));
   EXPECT_TRUE(HasNode("merge"));
   EXPECT_TRUE(HasNode("t1"));
+  EXPECT_TRUE(HasNode("next"));
 
   // Sanity check we created cycle
   EXPECT_TRUE(HasEdge("merge", 0, "t1", 0));
-  EXPECT_TRUE(HasEdge("t1", 0, "merge", 1));
+  EXPECT_TRUE(HasEdge("t1", 0, "next", 0));
+  EXPECT_TRUE(HasEdge("next", 0, "merge", 1));
 
   // Test that control dep was added to exactly one node of cycle
   EXPECT_TRUE(HasControlEdge("W1", "merge"));
@@ -1899,13 +1904,17 @@ TEST_F(GraphConstructorTest, ImportGraphDef_ControlDepsWithCycle) {
   Node* merge = FindNode("merge");
   ASSERT_EQ(merge->requested_inputs().size(), 3);
   EXPECT_EQ(merge->requested_inputs()[0], "input:0");
-  EXPECT_EQ(merge->requested_inputs()[1], "t1:0");
+  EXPECT_EQ(merge->requested_inputs()[1], "next:0");
   EXPECT_EQ(merge->requested_inputs()[2], "^W1");
 
   Node* t1 = FindNode("t1");
   ASSERT_EQ(t1->requested_inputs().size(), 2);
   EXPECT_EQ(t1->requested_inputs()[0], "merge:0");
   EXPECT_EQ(t1->requested_inputs()[1], "merge:0");
+
+  Node* next = FindNode("next");
+  ASSERT_EQ(next->requested_inputs().size(), 1);
+  EXPECT_EQ(next->requested_inputs()[0], "t1:0");
 }
 
 TEST_F(GraphConstructorTest, ImportGraphDef_ControlDepsErrors) {
@@ -2316,7 +2325,93 @@ TEST_F(GraphConstructorTest, ImportGraphDefProvidedShapeRefinerVersions) {
   ImportGraphDefOptions opts;
   // A valid graph at producer version 20, but one
   // that would not import if the graph_def_version were 21.
-  string gdef_ascii = strings::StrCat(R"EOF(
+  string gdef_ascii;
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  gdef_ascii = strings::StrCat(R"EOF(
+node {
+  name: "Sum/input"
+  op: "Const"
+  attr {
+    key: "dtype"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "value"
+    value {
+      tensor {
+        dtype: DT_INT32
+        tensor_shape {
+          dim {
+            size: 2
+          }
+          dim {
+            size: 1
+          }
+        }
+        tensor_content: "\000\000\000\001\000\000\000\002"
+      }
+    }
+  }
+}
+node {
+  name: "Sum/reduction_indices"
+  op: "Const"
+  attr {
+    key: "dtype"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "value"
+    value {
+      tensor {
+        dtype: DT_INT32
+        tensor_shape {
+          dim {
+            size: 2
+          }
+          dim {
+            size: 1
+          }
+        }
+        tensor_content: "\000\000\000\000\000\000\000\001"
+      }
+    }
+  }
+}
+node {
+  name: "Sum"
+  op: "Sum"
+  input: "Sum/input"
+  input: "Sum/reduction_indices"
+  attr {
+    key: "T"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "Tidx"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "keep_dims"
+    value {
+      b: false
+    }
+  }
+}
+versions {
+  producer: 20
+})EOF");
+
+#else
+  gdef_ascii = strings::StrCat(R"EOF(
 node {
   name: "Sum/input"
   op: "Const"
@@ -2398,7 +2493,7 @@ node {
 versions {
   producer: 20
 })EOF");
-
+#endif
   // Create a shape refiner with the latest TF_GRAPH_DEF_VERSION.
   // Importing the graphdef with an existing refiner should
   // make the refiner inherit the graphdef version from the
@@ -2407,6 +2502,40 @@ versions {
   ExpectOK(gdef_ascii, opts, &refiner);
 
   // Add another node with a higher producer
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  gdef_ascii = strings::StrCat(R"EOF(
+node {
+  name: "RandomConst"
+  op: "Const"
+  attr {
+    key: "dtype"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "value"
+    value {
+      tensor {
+        dtype: DT_INT32
+        tensor_shape {
+          dim {
+            size: 2
+          }
+          dim {
+            size: 1
+          }
+        }
+        tensor_content: "\000\000\000\001\000\000\000\002"
+      }
+    }
+  }
+}
+versions {
+  producer: 21
+})EOF");
+
+#else
   gdef_ascii = strings::StrCat(R"EOF(
 node {
   name: "RandomConst"
@@ -2438,6 +2567,7 @@ node {
 versions {
   producer: 21
 })EOF");
+#endif
 
   ExpectOK(gdef_ascii, opts, &refiner);
   // Check that the refiner's graph def version is the lowest of
@@ -2445,6 +2575,40 @@ versions {
   EXPECT_EQ(20, refiner.graph_def_version());
 
   // Add another node with a lower producer
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  gdef_ascii = strings::StrCat(R"EOF(
+node {
+  name: "RandomConst2"
+  op: "Const"
+  attr {
+    key: "dtype"
+    value {
+      type: DT_INT32
+    }
+  }
+  attr {
+    key: "value"
+    value {
+      tensor {
+        dtype: DT_INT32
+        tensor_shape {
+          dim {
+            size: 2
+          }
+          dim {
+            size: 1
+          }
+        }
+        tensor_content: "\000\000\000\001\000\000\000\002"
+      }
+    }
+  }
+}
+versions {
+  producer: 17
+})EOF");
+
+#else
   gdef_ascii = strings::StrCat(R"EOF(
 node {
   name: "RandomConst2"
@@ -2476,6 +2640,7 @@ node {
 versions {
   producer: 17
 })EOF");
+#endif
   ExpectOK(gdef_ascii, opts, &refiner);
 
   // Check that the refiner's graph def version is the lowest of

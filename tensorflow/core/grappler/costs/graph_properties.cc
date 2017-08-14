@@ -70,6 +70,7 @@ Status ShapeOfMergeNode(const Node* node, InferenceContext* c) {
 Status UpdateEnter(ShapeRefiner* shape_refiner, const Node* node, bool relax,
                    std::queue<const Node*>* new_shapes) {
   auto enter_ctx = shape_refiner->GetContext(node);
+  CHECK_NE(enter_ctx, nullptr);
   for (int i = 0; i < enter_ctx->num_outputs(); i++) {
     TF_RETURN_IF_ERROR(shape_refiner->SetShape(node, i, enter_ctx->input(0)));
   }
@@ -82,7 +83,7 @@ Status UpdateEnter(ShapeRefiner* shape_refiner, const Node* node, bool relax,
         continue;
       }
       InferenceContext* merge_ctx = shape_refiner->GetContext(dst);
-      DCHECK_NE(merge_ctx, nullptr);
+      CHECK_NE(merge_ctx, nullptr);
       TF_RETURN_IF_ERROR(ShapeOfMergeNode(dst, merge_ctx));
       new_shapes->push(dst);
     }
@@ -179,8 +180,9 @@ Status GraphProperties::RelaxEnqueueShapesAndMergeTypes(
 
 Status GraphProperties::InferStatically() {
   Graph graph(OpRegistry::Global());
-  ShapeRefiner shape_refiner(graph.versions().producer(), graph.op_registry());
+  ShapeRefiner shape_refiner(graph.versions(), graph.op_registry());
   shape_refiner.set_require_shape_inference_fns(false);
+  shape_refiner.set_disable_constant_propagation(true);
   ImportGraphDefOptions options;
   Status s = ImportGraphDef(options, item_.graph, &graph, &shape_refiner);
   TF_RETURN_IF_ERROR(s);
@@ -200,8 +202,12 @@ Status GraphProperties::InferStatically() {
     }
     if (node->IsEnter()) {
       enter_nodes.insert(node);
-    } else if (node->IsMerge()) {
-      merge_nodes.insert(node);
+    } else if (node->IsNextIteration()) {
+      for (const Node* output : node->out_nodes()) {
+        if (output->IsMerge()) {
+          merge_nodes.insert(output);
+        }
+      }
     }
   }
 
@@ -428,26 +434,30 @@ Status GraphProperties::InferFromCostGraph(const CostGraphDef& cost_graph) {
   return Status::OK();
 }
 
+bool GraphProperties::HasInputProperties(const string& name) const {
+  return input_properties_.find(name) != input_properties_.end();
+}
+
 bool GraphProperties::HasOutputProperties(const string& name) const {
   return output_properties_.find(name) != output_properties_.end();
 }
 
-std::vector<OpInfo::TensorProperties> GraphProperties::GetInputProperties(
-    const string& node_name) const {
+const std::vector<OpInfo::TensorProperties>&
+GraphProperties::GetInputProperties(const string& node_name) const {
   auto it = input_properties_.find(node_name);
   if (it != input_properties_.end()) {
     return it->second;
   }
-  return std::vector<OpInfo::TensorProperties>();
+  return missing_properties_;
 }
 
-std::vector<OpInfo::TensorProperties> GraphProperties::GetOutputProperties(
-    const string& node_name) const {
+const std::vector<OpInfo::TensorProperties>&
+GraphProperties::GetOutputProperties(const string& node_name) const {
   auto it = output_properties_.find(node_name);
   if (it != output_properties_.end()) {
     return it->second;
   }
-  return std::vector<OpInfo::TensorProperties>();
+  return missing_properties_;
 }
 
 }  // end namespace grappler

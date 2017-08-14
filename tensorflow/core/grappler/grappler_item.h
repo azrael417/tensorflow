@@ -34,6 +34,9 @@ namespace grappler {
 // nodes, and potentially a set of nodes to feed.
 // TODO(volunteer_needed): turn this struct into a class.
 struct GrapplerItem {
+  GrapplerItem() {}
+  GrapplerItem(const GrapplerItem& other, GraphDef&& graphDef);
+
   string id;  // A unique id for this item
 
   // Inputs
@@ -51,6 +54,8 @@ struct GrapplerItem {
 
   // Return the set of node evaluated during a regular train/inference step.
   std::vector<const NodeDef*> MainOpsFanin() const;
+  // Return the set of node run to populate the queues (if any).
+  std::vector<const NodeDef*> EnqueueOpsFanin() const;
   // Return the set nodes used by TensorFlow to initialize the graph.
   std::vector<const NodeDef*> InitOpsFanin() const;
   // Return the set of variables accessed during a regular train/inference step.
@@ -60,6 +65,13 @@ struct GrapplerItem {
 // Return the transitive fanin of a set of terminal nodes.
 std::vector<const NodeDef*> ComputeTransitiveFanin(
     const GraphDef& graph, const std::vector<string>& terminal_nodes);
+
+// Return the transitive fanin of a set of terminal nodes. Sets 'ill_formed' to
+// true if one of the node is missing in the graph, or some node inputs don't
+// exist.
+std::vector<const NodeDef*> ComputeTransitiveFanin(
+    const GraphDef& graph, const std::vector<string>& terminal_nodes,
+    bool* ill_formed);
 
 }  // end namespace grappler
 }  // end namespace tensorflow
