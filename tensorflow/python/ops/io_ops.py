@@ -27,6 +27,7 @@ See the @{$python/io_ops} guide.
 @@IdentityReader
 @@TFRecordReader
 @@LMDBReader
+@@HDF5Reader
 @@FixedLengthRecordReader
 @@decode_csv
 @@decode_raw

@@ -946,8 +946,7 @@ def set_other_mpi_vars(environ_cp):
 
 def set_hdf5_home(environ_cp):
   """Set HDF5_HOME."""
-  cmd = ('dirname $(dirname $(which h5cc)) || dirname $(dirname $(which '
-         'h5c++))  || true')
+  cmd = ['dirname','$(dirname $(which h5cc))', '||', 'dirname', '$(dirname $(which h5c++))']
   default_hdf5_home = run_shell(cmd)
   ask_hdf5_home = ('Please specify the HDF5 folder. [Default is %s]: '
                  ) % default_hdf5_home

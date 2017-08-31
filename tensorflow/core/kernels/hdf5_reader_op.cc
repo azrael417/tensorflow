@@ -29,25 +29,25 @@ limitations under the License.
 namespace tensorflow {
 
     inline void HDF5_CHECK_FILE_EXISTS(hid_t hdf5_status) {
-        CHECK_LT(hdf5_status, 0) << "Error, file does not exist.";
-        CHECK_EQ(hdf5_status, 0) << "Error, file exists but is not a valid HDF5 file.";
+        CHECK_NE(hdf5_status, 0) << "Error, file exists but is not a valid HDF5 file.";
+        CHECK_GT(hdf5_status, 0) << "Error, file does not exist.";
     }
     
-    inline void HDF5_CHECK_FILE(hid_t hdf5_status) {
-        CHECK_LT(hdf5_status, 0) << "Error, cannot open file.";
+    inline void HDF5_CHECK_FILE(hid_t hdf5_status, const string& filename) {
+        CHECK_GE(hdf5_status, 0) << "Error, could not open file " << filename << ".";
     }
     
-    inline void HDF5_CHECK_OBJECT_EXISTS(hid_t hdf5_status){
-        CHECK_LT(hdf5_status, 0) << "Error, object lookup failed.";
-        CHECK_EQ(hdf5_status, 0) << "Error, object does not exist.";
+    inline void HDF5_CHECK_OBJECT_EXISTS(hid_t hdf5_status, const string& objname){
+        CHECK_NE(hdf5_status, 0) << "Error, object " << objname << " does not exist.";
+        CHECK_GT(hdf5_status, 0) << "Error, object lookup for " << objname << " failed.";
     }
     
-    inline void HDF5_CHECK_OBJECT_IS_DATASET(const H5O_info_t& objinfo){
-        CHECK_NE(objinfo.type, H5O_TYPE_DATASET) << "Error, object is not a dataset.";
+    inline void HDF5_CHECK_OBJECT_IS_DATASET(const H5O_info_t& objinfo, const string& objname){
+        CHECK_EQ(objinfo.type, H5O_TYPE_DATASET) << "Error, object " << objname << " is not a dataset.";
     }
     
     inline void HDF5_CHECK_OK(hid_t hdf5_status, const string& description){
-        CHECK_LT(hdf5_status, 0) << "Error, " << description <<  ".";
+        CHECK_GE(hdf5_status, 0) << "Error, " << description <<  ".";
     }
     
     class HDF5Reader : public ReaderBase {
@@ -62,12 +62,13 @@ namespace tensorflow {
         }
 
         Status OnWorkStartedLocked() override {
+            
             //check if file is actually and hdf5 file:
             HDF5_CHECK_FILE_EXISTS(H5Fis_hdf5(current_work().c_str()));
             //survived that call? try opening it in readonly mode
             unsigned int flags = H5F_ACC_RDONLY;
             hdf5_env_ = H5Fopen(current_work().c_str(),flags,H5P_DEFAULT);
-            HDF5_CHECK_FILE(hdf5_env_);
+            HDF5_CHECK_FILE(hdf5_env_, current_work());
 
             //what should follow now is to see if the datasets we want to read are actually there,
             //but for that I need to find out how to pass that list to the routine first
@@ -75,12 +76,12 @@ namespace tensorflow {
                 
                 //we do not need to check everything along the path because we want the routine to error out even if the 
                 //full path does not exist
-                HDF5_CHECK_OBJECT_EXISTS(H5Oexists_by_name( hdf5_env_, hdf5_dset_names_[i].c_str(), H5P_DEFAULT ));
+                HDF5_CHECK_OBJECT_EXISTS(H5Oexists_by_name( hdf5_env_, hdf5_dset_names_[i].c_str(), H5P_DEFAULT ), hdf5_dset_names_[i]);
                 
                 //check if object is a dataset
                 H5O_info_t object_info;
                 H5Oget_info_by_name( hdf5_env_, hdf5_dset_names_[i].c_str(), &object_info, H5P_DEFAULT );
-                HDF5_CHECK_OBJECT_IS_DATASET(object_info);
+                HDF5_CHECK_OBJECT_IS_DATASET(object_info, hdf5_dset_names_[i]);
                 
                 //open the dataset and push handle into a list
                 hid_t dsetid = H5Dopen(hdf5_env_, hdf5_dset_names_[i].c_str(), H5P_DEFAULT);
@@ -98,13 +99,15 @@ namespace tensorflow {
                 //determine dimensionalities and append to list:
                 std::vector<hsize_t> dims(ndims);
                 H5Sget_simple_extent_dims(memid, dims.data(), NULL);
+                //if vector is provided, attach singleton dimension. that should not do harm to the rest of the code
+                if(ndims==1) dims.push_back(1);
                 hdf5_dset_dims_.push_back(dims);
             }
             
             //check if the size of all 0-axis is the same across the datasets used:
-            int num_rows_ = hdf5_dset_dims_[0][0];
+            num_rows_ = hdf5_dset_dims_[0][0];
             for(unsigned i=1; i<hdf5_dset_dims_.size(); ++i){
-                CHECK_LT(num_rows_, hdf5_dset_dims_[i][0]) << "Error, datasets " << hdf5_dset_names_[0] <<  " and " << hdf5_dset_names_[i] << " do not have the same extents in axis 0.";
+                CHECK_EQ(num_rows_, hdf5_dset_dims_[i][0]) << "Error, datasets " << hdf5_dset_names_[0] <<  " and " << hdf5_dset_names_[i] << " do not have the same extents in axis 0.";
             }
             
             //initialize input buffers:
@@ -167,14 +170,16 @@ namespace tensorflow {
                 start[i] = 0;
                 count[i] = hdf5_dset_dims_[dset_index][i];
             }
+            
             //select the slab, backup the old one
             hid_t file_space = hdf5_dset_memids_[dset_index];
             HDF5_CHECK_OK(H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL), "file-hyperslab for dataset " + hdf5_dset_names_[dset_index]+".");
-            hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(hdf5_dset_dims_[dset_index].size()), hdf5_dset_dims_[dset_index].data(), NULL);
-            HDF5_CHECK_OK(mem_space,"cannot create memory space.");
+            //hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(hdf5_dset_dims_[dset_index].size()-1), &(hdf5_dset_dims_[dset_index][1]), NULL);
+            //HDF5_CHECK_OK(mem_space,"cannot create memory space.");
             
             //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+            //HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, H5S_ALL, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
             
             //create output string
             string result="";
@@ -187,13 +192,15 @@ namespace tensorflow {
                     result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][run]);
                     run++;
                 }
-                result = strings::StrCat(result, ";");
+                if(d!=hdf5_dset_dims_[dset_index].size()-1)
+                    result = strings::StrCat(result, ";");
             }
             return result;
         }
 
 
         Status ReadLocked(string* key, string* value, bool* produced, bool* at_end) override {
+            
             //reached the end of the file
             if(row_num_ >= num_rows_) {
                 *at_end = true;
@@ -206,7 +213,7 @@ namespace tensorflow {
                 keystring = strings::StrCat(keystring, ":", hdf5_dset_names_[i]);
             }
             *key = strings::StrCat(keystring, "@", current_work(), ":", row_num_);
-            
+                        
             //now take care of value
             *value = ReadRow(0);
             for(unsigned int i=1; i<hdf5_dset_names_.size(); i++){
