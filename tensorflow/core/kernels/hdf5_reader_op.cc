@@ -112,8 +112,13 @@ namespace tensorflow {
             
             //initialize input buffers:
             for(unsigned i=0; i<hdf5_dset_dims_.size(); ++i){
+                
+                //compute sizes for buffers
                 unsigned int size = 1;
                 for(unsigned int d=1; d<hdf5_dset_dims_[i].size(); d++) size *= hdf5_dset_dims_[i][d];
+                hdf5_dset_sizes_.push_back(size);
+                
+                //allocate buffers
                 float* tmpbuf = new float[size];
                 hdf5_dset_buffers_.push_back(tmpbuf);
             }
@@ -153,6 +158,7 @@ namespace tensorflow {
                 hdf5_dset_memids_.clear();
                 hdf5_dset_dims_.clear();
                 hdf5_dset_buffers_.clear();
+                hdf5_dset_sizes_.clear();
                 hdf5_env_ = 0;
             }
             return Status::OK();
@@ -181,19 +187,19 @@ namespace tensorflow {
             HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
             
             //create output string
-            string result="";
-            int run = 0;
-            //skip first dimension because this is n-sample dimension
-            for(unsigned int d=1; d<hdf5_dset_dims_[dset_index].size(); ++d){
-                result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][run]);
-                run++;
-                for(unsigned int i=1; i<hdf5_dset_dims_[dset_index][d]; ++i){
-                    result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][run]);
-                    run++;
-                }
-                if(d!=hdf5_dset_dims_[dset_index].size()-1)
-                    result = strings::StrCat(result, ";");
+            //first, get dimensions
+            string result = strings::StrCat("(", hdf5_dset_dims_[dset_index][1]);
+            for(unsigned int d=2; d<hdf5_dset_dims_[dset_index].size(); ++d){
+                result = strings::StrCat(result, ",", hdf5_dset_dims_[dset_index][d]);
             }
+            result = strings::StrCat(result, ")[");
+            //now get the data
+            result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][0]);
+            for(unsigned int r=1; r<hdf5_dset_sizes_[dset_index]; ++r){
+                result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][r]);
+            }
+            result = strings::StrCat(result, "]");
+            
             return result;
         }
 
@@ -241,6 +247,7 @@ namespace tensorflow {
         std::vector<hid_t> hdf5_dset_ids_, hdf5_dset_memids_;
         std::vector< std::vector<hsize_t> > hdf5_dset_dims_;
         std::vector<float*> hdf5_dset_buffers_;
+        std::vector<size_t> hdf5_dset_sizes_;
         unsigned int row_num_, num_rows_;
         hid_t plist_id_;
     };
