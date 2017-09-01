@@ -54,7 +54,12 @@ namespace tensorflow {
     public:
         HDF5Reader(const string& node_name, std::vector<string> datasets, Env* env) : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")), 
         env_(env), hdf5_env_(0), hdf5_dset_names_(datasets), row_num_(0), num_rows_(0) {
+            
+            //default property list for data access
             plist_id_ = H5Pcreate(H5P_DATASET_XFER);
+            
+            //fill supported types vector: using initializer list but that can cause trouble with some compilers:
+            supported_types_ = {H5T_NATIVE_FLOAT, H5T_NATIVE_DOUBLE, H5T_NATIVE_INT};
         }
         
         ~HDF5Reader(){
@@ -102,6 +107,19 @@ namespace tensorflow {
                 //if vector is provided, attach singleton dimension. that should not do harm to the rest of the code
                 if(ndims==1) dims.push_back(1);
                 hdf5_dset_dims_.push_back(dims);
+                
+                //check datatype, only numeric types supported so far:
+                hid_t type_id = H5Dget_type(dsetid);
+                bool type_supported=false;
+                for(unsigned int i=0; i<supported_types_.size(); ++i){
+                    if( H5Tequal(type_id,supported_types_[i]) > 0 ){
+                        type_supported=true;
+                        break;
+                    }
+                }
+                //close type
+                H5Tclose(type_id);
+                CHECK_EQ(type_supported,true) << "Error, datatype of dataset " << hdf5_dset_names_[i] << " not supported. Only Numeric types are supported at the moment.";
             }
             
             //check if the size of all 0-axis is the same across the datasets used:
@@ -165,45 +183,6 @@ namespace tensorflow {
         }
 
 
-        string ReadRow(const unsigned int& dset_index){
-            //vector arrays
-            std::vector<hsize_t> start(hdf5_dset_dims_[dset_index].size()), count(hdf5_dset_dims_[dset_index].size());
-            
-            //set hyperslab parameters
-            start[0] = row_num_;
-            count[0] = 1;
-            for(unsigned int i=1; i<hdf5_dset_dims_[dset_index].size(); ++i){
-                start[i] = 0;
-                count[i] = hdf5_dset_dims_[dset_index][i];
-            }
-            
-            //select the slab, backup the old one
-            hid_t file_space = hdf5_dset_memids_[dset_index];
-            HDF5_CHECK_OK(H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL), "file-hyperslab for dataset " + hdf5_dset_names_[dset_index]+".");
-            hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(hdf5_dset_dims_[dset_index].size()-1), &(hdf5_dset_dims_[dset_index][1]), NULL);
-            HDF5_CHECK_OK(mem_space,"cannot create memory space.");
-            
-            //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
-            
-            //create output string
-            //first, get dimensions
-            string result = strings::StrCat("(", hdf5_dset_dims_[dset_index][1]);
-            for(unsigned int d=2; d<hdf5_dset_dims_[dset_index].size(); ++d){
-                result = strings::StrCat(result, ",", hdf5_dset_dims_[dset_index][d]);
-            }
-            result = strings::StrCat(result, ")[");
-            //now get the data
-            result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][0]);
-            for(unsigned int r=1; r<hdf5_dset_sizes_[dset_index]; ++r){
-                result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][r]);
-            }
-            result = strings::StrCat(result, "]");
-            
-            return result;
-        }
-
-
         Status ReadLocked(string* key, string* value, bool* produced, bool* at_end) override {
             
             //reached the end of the file
@@ -244,13 +223,57 @@ namespace tensorflow {
         Env* const env_;
         hid_t hdf5_env_;
         std::vector<string> hdf5_dset_names_;
-        std::vector<hid_t> hdf5_dset_ids_, hdf5_dset_memids_;
+        std::vector<hid_t> hdf5_dset_ids_, hdf5_dset_memids_, supported_types_;
         std::vector< std::vector<hsize_t> > hdf5_dset_dims_;
         std::vector<float*> hdf5_dset_buffers_;
         std::vector<size_t> hdf5_dset_sizes_;
         unsigned int row_num_, num_rows_;
         hid_t plist_id_;
+        
+        string EncodeASCII(const unsigned int& dset_index){
+            //create output string
+            //first, get dimensions
+            string result = strings::StrCat("(", hdf5_dset_dims_[dset_index][1]);
+            for(unsigned int d=2; d<hdf5_dset_dims_[dset_index].size(); ++d){
+                result = strings::StrCat(result, ",", hdf5_dset_dims_[dset_index][d]);
+            }
+            result = strings::StrCat(result, ")[");
+            //now get the data
+            result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][0]);
+            for(unsigned int r=1; r<hdf5_dset_sizes_[dset_index]; ++r){
+                result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][r]);
+            }
+            result = strings::StrCat(result, "]");
+            
+            return result;
+        }
+
+
+        string ReadRow(const unsigned int& dset_index){
+            //vector arrays
+            std::vector<hsize_t> start(hdf5_dset_dims_[dset_index].size()), count(hdf5_dset_dims_[dset_index].size());
+            
+            //set hyperslab parameters
+            start[0] = row_num_;
+            count[0] = 1;
+            for(unsigned int i=1; i<hdf5_dset_dims_[dset_index].size(); ++i){
+                start[i] = 0;
+                count[i] = hdf5_dset_dims_[dset_index][i];
+            }
+            
+            //select the slab, backup the old one
+            hid_t file_space = hdf5_dset_memids_[dset_index];
+            HDF5_CHECK_OK(H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL), "file-hyperslab for dataset " + hdf5_dset_names_[dset_index]+".");
+            hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(hdf5_dset_dims_[dset_index].size()-1), &(hdf5_dset_dims_[dset_index][1]), NULL);
+            HDF5_CHECK_OK(mem_space,"cannot create memory space.");
+            
+            //read from the slab
+            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+            
+            return EncodeASCII(dset_index);
+        }
     };
+
 
     class HDF5ReaderOp : public ReaderOpKernel {
     public:

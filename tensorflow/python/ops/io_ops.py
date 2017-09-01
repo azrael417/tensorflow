@@ -31,6 +31,7 @@ See the @{$python/io_ops} guide.
 @@FixedLengthRecordReader
 @@decode_csv
 @@decode_raw
+@@decode_hdf5
 @@VarLenFeature
 @@FixedLenFeature
 @@FixedLenSequenceFeature

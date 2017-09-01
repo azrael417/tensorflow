@@ -3300,11 +3300,12 @@ cc_library(
     name = "parsing",
     deps = [
         ":decode_csv_op",
-        ":decode_raw_op",
-        ":example_parsing_ops",
+        ":decode_raw_op",]
+        + if_hdf5([":decode_hdf5_op"])
+        + [":example_parsing_ops",
         ":parse_tensor_op",
         ":string_to_number_op",
-    ],
+        ],
 )
 
 PARSING_DEPS = [
@@ -3325,6 +3326,14 @@ tf_kernel_library(
     name = "decode_raw_op",
     prefix = "decode_raw_op",
     deps = PARSING_DEPS,
+)
+
+tf_kernel_library(
+    name = "decode_hdf5_op",
+    prefix = "decode_hdf5_op",
+    deps = PARSING_DEPS + [
+          "//third_party/hdf5",
+          ],
 )
 
 tf_kernel_library(
