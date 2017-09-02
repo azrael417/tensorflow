@@ -29,9 +29,7 @@ namespace tensorflow {
 class DecodeHDF5Op : public OpKernel {
  public:
   explicit DecodeHDF5Op(OpKernelConstruction* ctx) : OpKernel(ctx) {
-    
-    std::cout << "INSIDE CONSTRUCTOR" << std::endl;
-    
+        
     OP_REQUIRES_OK(ctx, ctx->GetAttr("OUT_TYPE", &out_type_));
     OP_REQUIRES(ctx, out_type_.size() < std::numeric_limits<int>::max(),
                 errors::InvalidArgument("Out type too large"));
@@ -48,23 +46,71 @@ class DecodeHDF5Op : public OpKernel {
     auto records_t = records->flat<string>();
     int64 records_size = records_t.size();
 
+    std::vector<string> recs;
+    for (int64 i = 0; i < records_size; ++i) {
+      std::vector<string> tmprecs = str_util::Split(records_t(i), ":");
+      recs.insert(recs.end(), tmprecs.begin(), tmprecs.end());
+    }
+    OP_REQUIRES(ctx, recs.size()==out_type_.size(), errors::InvalidArgument("Error, number of tensors in recordstring does not match the record format specified."));
+    
     OpOutputList output;
     OP_REQUIRES_OK(ctx, ctx->output_list("output", &output));
-
+    
     for (int i = 0; i < static_cast<int>(out_type_.size()); ++i) {
       Tensor* out = nullptr;
-      OP_REQUIRES_OK(ctx, output.allocate(i, records->shape(), &out));
-    }
-    
-    std::cout << "SIZE " << records_size << std::endl;
-    
-    for (int64 i = 0; i < records_size; ++i) {
-      std::cout << i << std::endl;
+      
+      //get the tensor shapes:
+      TensorShape shape;
+      OP_REQUIRES_OK(ctx, ExtractShape(shape, recs[i]));
+      OP_REQUIRES_OK(ctx, output.allocate(i, shape, &out));
+      
+      //fill values:
+      OP_REQUIRES_OK(ctx, ExtractValues(output[i], recs[i]));
     }
   }
 
  private:
   std::vector<DataType> out_type_;
+  
+  //extract shape from record string
+  Status ExtractShape(TensorShape& shape, const string& record){
+    auto recordvec = str_util::Split(record, "[");
+    CHECK(recordvec.size()==2);
+    
+    //clear shape
+    shape.Clear();
+    //infer dims
+    string shapestring = recordvec[0];
+    shapestring = str_util::StringReplace(shapestring, "(", "", true);
+    shapestring = str_util::StringReplace(shapestring, ")", "", true);
+    auto dims = str_util::Split(shapestring, ",");
+    for(unsigned int d=0; d<dims.size(); d++){
+      long long dimsize;
+      CHECK(strings::safe_strto64(dims[d], &dimsize));
+      shape.AddDim(dimsize);
+    }
+    return Status::OK();
+  }
+  
+  //extract the content
+  Status ExtractValues(Tensor& tensor, const string& record){
+    auto recordvec = str_util::Split(record, ")");
+    //parse values
+    string valuestring = recordvec[1];
+    valuestring = str_util::StringReplace(valuestring, "[", "", true);
+    valuestring = str_util::StringReplace(valuestring, "]", "", true);
+    auto values = str_util::Split(valuestring, ",");
+    
+    CHECK(values.size()==tensor.shape().num_elements());
+    
+    auto tensor_t = tensor.flat<float>();
+    for (unsigned int i = 0; i < values.size(); ++i) {
+      float val;
+      CHECK(strings::safe_strtof(values[i], &val));
+      tensor_t(i) = val;
+    }
+    return Status::OK();
+  }
 };
 
 REGISTER_KERNEL_BUILDER(Name("DecodeHDF5").Device(DEVICE_CPU), DecodeHDF5Op);
