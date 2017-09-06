@@ -65,7 +65,7 @@ class DecodeHDF5Op : public OpKernel {
       OP_REQUIRES_OK(ctx, output.allocate(i, shape, &out));
       
       //fill values:
-      OP_REQUIRES_OK(ctx, ExtractValues(output[i], recs[i]));
+      OP_REQUIRES_OK(ctx, ExtractValues((*output[i]), recs[i]));
     }
   }
 
@@ -106,7 +106,7 @@ class DecodeHDF5Op : public OpKernel {
     auto tensor_t = tensor.flat<float>();
     for (unsigned int i = 0; i < values.size(); ++i) {
       float val;
-      CHECK(strings::safe_strtof(values[i], &val));
+      CHECK(strings::safe_strtof(values[i].c_str(), &val));
       tensor_t(i) = val;
     }
     return Status::OK();
