@@ -227,6 +227,17 @@ tf_py_test(
 )
 
 tf_py_test(
+    name = "decode_hdf5_op_test",
+    size = "small",
+    srcs = ["decode_hdf5_op_test.py"],
+    additional_deps = [
+        "//third_party/py/numpy",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:parsing_ops",
+    ],
+)
+
+tf_py_test(
     name = "decode_png_op_test",
     size = "small",
     srcs = ["decode_png_op_test.py"],
