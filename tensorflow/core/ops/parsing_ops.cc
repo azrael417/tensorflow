@@ -362,7 +362,7 @@ REGISTER_OP("DecodeHDF5")
     .Doc(R"doc(
 Convert HDF5 records to tensors. Each String element maps to one Tensor.
 Currently, all elements must be of numeric type and the resulting tensor objects will
-be comprised of single precision floating point numbers. 
+be comprised of either float32, float64, int32 or int64 numbers. 
 
 records: Each string is an HDF5 record.
 output: List of tensors, where each tensor will have the shape as specified by the records.
