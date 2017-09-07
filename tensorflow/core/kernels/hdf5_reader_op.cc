@@ -114,11 +114,10 @@ namespace tensorflow {
                 for(unsigned int i=0; i<supported_types_.size(); ++i){
                     if( H5Tequal(type_id,supported_types_[i]) > 0 ){
                         type_supported=true;
+			hdf5_dset_types_.push_back(type_id);
                         break;
                     }
                 }
-                //close type
-                H5Tclose(type_id);
                 CHECK_EQ(type_supported,true) << "Error, datatype of dataset " << hdf5_dset_names_[i] << " not supported. Only Numeric types are supported at the moment.";
             }
             
@@ -137,7 +136,8 @@ namespace tensorflow {
                 hdf5_dset_sizes_.push_back(size);
                 
                 //allocate buffers
-                float* tmpbuf = new float[size];
+		int typesize=H5Tget_size(hdf5_dset_types_[i]);
+                char* tmpbuf = new char[size*typesize];
                 hdf5_dset_buffers_.push_back(tmpbuf);
             }
             
@@ -177,6 +177,7 @@ namespace tensorflow {
                 hdf5_dset_dims_.clear();
                 hdf5_dset_buffers_.clear();
                 hdf5_dset_sizes_.clear();
+		hdf5_dset_types_.clear();
                 hdf5_env_ = 0;
             }
             return Status::OK();
@@ -212,6 +213,7 @@ namespace tensorflow {
             return Status::OK();
         }
 
+
         Status ResetLocked() override {
             //reset row number
             row_num_ = 0;
@@ -223,13 +225,34 @@ namespace tensorflow {
         Env* const env_;
         hid_t hdf5_env_;
         std::vector<string> hdf5_dset_names_;
-        std::vector<hid_t> hdf5_dset_ids_, hdf5_dset_memids_, supported_types_;
+        std::vector<hid_t> hdf5_dset_ids_, hdf5_dset_memids_, hdf5_dset_types_, supported_types_;
         std::vector< std::vector<hsize_t> > hdf5_dset_dims_;
-        std::vector<float*> hdf5_dset_buffers_;
+        std::vector<char*> hdf5_dset_buffers_;
         std::vector<size_t> hdf5_dset_sizes_;
         unsigned int row_num_, num_rows_;
         hid_t plist_id_;
+
         
+        inline string EncodeTokenASCII(char* buff, const hid_t& type_id){
+	  char* result = new char[strings::kFastToBufferSize];
+	  if(H5Tequal(type_id,H5T_NATIVE_FLOAT)){
+	    float tmpval = (*reinterpret_cast<float*>(buff));
+	    strings::FloatToBuffer(tmpval,result);
+	  }
+	  else if(H5Tequal(type_id,H5T_NATIVE_INT)){
+	    int tmpval = (*reinterpret_cast<int*>(buff));
+	    strings::FastInt32ToBufferLeft(tmpval,result);
+	  }
+	  else if(H5Tequal(type_id,H5T_NATIVE_DOUBLE)){
+	    double tmpval = (*reinterpret_cast<double*>(buff));
+	    strings::DoubleToBuffer(tmpval,result);
+	  }
+	  string res(result);
+	  delete result;
+	  return res;
+        }
+
+
         string EncodeASCII(const unsigned int& dset_index){
             //create output string
             //first, get dimensions
@@ -239,9 +262,10 @@ namespace tensorflow {
             }
             result = strings::StrCat(result, ")[");
             //now get the data
-            result = strings::StrCat(result, hdf5_dset_buffers_[dset_index][0]);
+	    int typesize = H5Tget_size(hdf5_dset_types_[dset_index]);
+            result = strings::StrCat(result, EncodeTokenASCII(&(hdf5_dset_buffers_[dset_index][0]), hdf5_dset_types_[dset_index]));
             for(unsigned int r=1; r<hdf5_dset_sizes_[dset_index]; ++r){
-                result = strings::StrCat(result, ",", hdf5_dset_buffers_[dset_index][r]);
+	      result = strings::StrCat(result, ",", EncodeTokenASCII(&(hdf5_dset_buffers_[dset_index][r*typesize]), hdf5_dset_types_[dset_index]));
             }
             result = strings::StrCat(result, "]");
             
@@ -268,8 +292,20 @@ namespace tensorflow {
             HDF5_CHECK_OK(mem_space,"cannot create memory space.");
             
             //read from the slab
-            HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], H5T_NATIVE_FLOAT, mem_space, file_space, plist_id_, hdf5_dset_buffers_[dset_index]),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+	    if(H5Tequal(hdf5_dset_types_[dset_index],H5T_NATIVE_FLOAT)){
+	      HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], hdf5_dset_types_[dset_index], mem_space, file_space, plist_id_, reinterpret_cast<float*>(hdf5_dset_buffers_[dset_index])),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+	    }
+	    else if(H5Tequal(hdf5_dset_types_[dset_index],H5T_NATIVE_INT)){
+	      HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], hdf5_dset_types_[dset_index], mem_space, file_space, plist_id_, reinterpret_cast<int*>(hdf5_dset_buffers_[dset_index])),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+	    }
+	    else if(H5Tequal(hdf5_dset_types_[dset_index],H5T_NATIVE_DOUBLE)){
+	      HDF5_CHECK_OK(H5Dread(hdf5_dset_ids_[dset_index], hdf5_dset_types_[dset_index], mem_space, file_space, plist_id_, reinterpret_cast<double*>(hdf5_dset_buffers_[dset_index])),strings::StrCat("cannot read row ",row_num_," from dataset ",hdf5_dset_names_[dset_index],"."));
+	    }
             
+	    //close the spaces:
+	    H5Sclose(file_space);
+	    H5Sclose(mem_space);
+
             return EncodeASCII(dset_index);
         }
     };
