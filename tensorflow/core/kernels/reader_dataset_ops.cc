@@ -479,6 +479,121 @@ class TFRecordDatasetOp : public DatasetOpKernel {
 REGISTER_KERNEL_BUILDER(Name("TFRecordDataset").Device(DEVICE_CPU),
                         TFRecordDatasetOp);
 
+
+#ifdef TENSORFLOW_USE_HDF5
+class HDF5DatasetOp : public DatasetOpKernel {
+public:
+  using DatasetOpKernel::DatasetOpKernel;
+
+  void MakeDataset(OpKernelContext* ctx, DatasetBase** output) override {
+    //read filenames
+    const Tensor* filenames_tensor;
+
+    OP_REQUIRES_OK(ctx, ctx->input("filenames", &filenames_tensor));
+    OP_REQUIRES(ctx, filenames_tensor->dims() <= 1, errors::InvalidArgument("`filenames` must be a scalar or a vector."));
+
+    std::vector<string> filenames;
+    filenames.reserve(filenames_tensor->NumElements());
+    for (int i = 0; i < filenames_tensor->NumElements(); ++i) {
+      filenames.push_back(filenames_tensor->flat<string>()(i));
+    }
+
+    //read datasetnames
+    const Tensor* datasets_tensor;
+
+    OP_REQUIRES_OK(ctx, ctx->input("datasets", &datasets_tensor));
+    OP_REQUIRES(ctx, datasets_tensor->dims() <= 1, errors::InvalidArgument("`datasets` must be a scalar or a vector."));
+
+    std::vector<string> datasets;
+    datasets.reserve(datasets_tensor->NumElements());
+    for (int i = 0; i < datasets_tensor->NumElements(); ++i) {
+      datasets.push_back(datasets_tensor->flat<string>()(i));
+    }
+    
+    //return dataset object
+    *output = new Dataset(std::move(filenames), datasets);
+  }
+
+private:
+  class Dataset : public DatasetBase {
+    public:
+      explicit Dataset(std::vector<string> filenames, const std::vector<string>& datasets)
+               : filenames_(std::move(filenames)), datasets_(datasets) {}
+
+      std::unique_ptr<IteratorBase> MakeIterator(const string& prefix) const override {
+        return std::unique_ptr<IteratorBase>(new Iterator({this, strings::StrCat(prefix, "::HDF5")}));
+      }
+
+      const DataTypeVector& output_dtypes() const override {
+        static DataTypeVector* dtypes = new DataTypeVector({DT_STRING});
+        return *dtypes;
+      }
+
+      const std::vector<PartialTensorShape>& output_shapes() const override {
+        static std::vector<PartialTensorShape>* shapes = new std::vector<PartialTensorShape>({{}});
+        return *shapes;
+      }
+
+      string DebugString() override { return "HDF5DatasetOp::Dataset"; }
+
+    private:
+      class Iterator : public DatasetIterator<Dataset> {
+        public:
+          explicit Iterator(const Params& params) : DatasetIterator<Dataset>(params) {}
+
+          Status GetNextInternal(IteratorContext* ctx, std::vector<Tensor>* out_tensors, bool* end_of_sequence) override {
+            mutex_lock l(mu_);
+            do {
+            //  // We are currently processing a file, so try to read the next record.
+            //  if (reader_) {
+            //    Tensor result_tensor(cpu_allocator(), DT_STRING, {});
+            //    Status s = reader_->ReadRecord(&result_tensor.scalar<string>()());
+            //    if (s.ok()) {
+            //      out_tensors->emplace_back(std::move(result_tensor));
+            //      *end_of_sequence = false;
+            //      return Status::OK();
+            //    } else if (!errors::IsOutOfRange(s)) {
+            //      return s;
+            //    }
+            //
+            //    // We have reached the end of the current file, so maybe
+            //    // move on to next file.
+            //    reader_.reset();
+            //    file_.reset();
+            //    ++current_file_index_;
+            //  }
+            //
+            //  // Iteration ends when there are no more files to process.
+            //  if (current_file_index_ == dataset()->filenames_.size()) {
+            //    *end_of_sequence = true;
+            //    return Status::OK();
+            //  }
+            //
+              // Actually move on to next file.
+              const string& next_filename = dataset()->filenames_[current_file_index_];
+              TF_RETURN_IF_ERROR(ctx->env()->NewRandomAccessFile(next_filename, &file_));
+              //  reader_.reset(new io::HDF5Reader(file_.get(), dataset()->datasets_));
+            } while (true);
+          }
+
+        private:
+          mutex mu_;
+          size_t current_file_index_ GUARDED_BY(mu_) = 0;
+
+          // `reader_` will borrow the object that `file_` points to, so
+          // we must destroy `reader_` before `file_`.
+          std::unique_ptr<RandomAccessFile> file_ GUARDED_BY(mu_);
+          //std::unique_ptr<io::HDF5Reader> reader_ GUARDED_BY(mu_);
+      };
+
+      const std::vector<string> filenames_, datasets_;
+  };
+};
+
+REGISTER_KERNEL_BUILDER(Name("HDF5Dataset").Device(DEVICE_CPU), HDF5DatasetOp);
+#endif
+
+
 }  // namespace
 
 }  // namespace tensorflow
