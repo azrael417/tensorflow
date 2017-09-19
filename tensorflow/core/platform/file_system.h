@@ -36,6 +36,7 @@ limitations under the License.
 
 namespace tensorflow {
 
+class StructuredAccessFile;
 class RandomAccessFile;
 class ReadOnlyMemoryRegion;
 class WritableFile;
@@ -238,6 +239,25 @@ class RandomAccessFile {
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(RandomAccessFile);
 };
+
+
+/// A file abstraction for performing strutured reads. CSV, HDF5 and other file classes could use that as base class.
+class StructuredAccessFile {
+ public:
+  StructuredAccessFile() {}
+  virtual ~StructuredAccessFile();
+
+  /// \brief We do not provide a base virtual Read function here since the function arguments
+  /// and return types might differ between different structured files. That said, the corresponding
+  /// structured data reader classes should be used to read these files. 
+  ///
+  /// Safe for concurrent use by multiple threads.
+  //virtual Status Read(uint64 offset, size_t n, StringPiece* result, Tensor* output) const = 0;
+
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(StructuredAccessFile);
+};
+
 
 /// \brief A file abstraction for sequential writing.
 ///

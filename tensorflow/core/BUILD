@@ -133,6 +133,12 @@ load(
     "if_mkl",
 )
 
+#for HDF5
+load(
+    "//third_party/hdf5:hdf5.bzl",
+    "if_hdf5",
+)
+
 # -----------------------------------------------------------------------------
 # Public targets
 
@@ -1324,7 +1330,8 @@ cc_library(
         ] +
         # Protobuf deps already included through the ":lib_proto_parsing"
         # dependency.
-        tf_additional_proto_srcs(),
+        tf_additional_proto_srcs()
+        ,
     ),
     hdrs = tf_additional_lib_hdrs() + [
         "lib/core/blocking_counter.h",
@@ -1392,7 +1399,7 @@ cc_library(
         "//tensorflow/core/platform/default/build_config:platformlib",
         "@snappy",
         "@zlib_archive//:zlib",
-    ],
+    ] + if_hdf5(["//third_party/hdf5",]),
 )
 
 # File compiled with extra flags to get cpu-specific acceleration.
