@@ -31,6 +31,12 @@ class PosixFileSystem : public FileSystem {
       const string& filename,
       std::unique_ptr<RandomAccessFile>* result) override;
 
+#ifdef TENSORFLOW_USE_HDF5
+  Status NewHDF5File(
+      const string& fname, 
+      std::unique_ptr<HDF5File>* result) override;
+#endif
+
   Status NewWritableFile(const string& fname,
                          std::unique_ptr<WritableFile>* result) override;
 

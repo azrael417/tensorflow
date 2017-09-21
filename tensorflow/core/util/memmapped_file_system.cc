@@ -18,6 +18,11 @@ limitations under the License.
 #include "tensorflow/core/platform/protobuf.h"
 #include "tensorflow/core/util/memmapped_file_system.pb.h"
 
+#ifdef TENSORFLOW_USE_HDF5
+//hdf5-specific stuff
+#include "third_party/hdf5/hdf5.h"
+#endif
+
 namespace tensorflow {
 
 namespace {
@@ -104,6 +109,33 @@ Status MemmappedFileSystem::NewRandomAccessFile(
       dir_element->second.length));
   return Status::OK();
 }
+
+#ifdef TENSORFLOW_USE_HDF5
+Status MemmappedFileSystem::NewHDF5File(const string& filename, std::unique_ptr<HDF5File>* result) {
+  if (!mapped_memory_) {
+    return errors::FailedPrecondition("MemmappedEnv is not initialized");
+  }
+  const auto dir_element = directory_.find(filename);
+  if (dir_element == directory_.end()) {
+    return errors::NotFound("Region ", filename, " is not found");
+  }
+  
+  //open the image as HDF5
+  //create file access property list
+  hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+  //extract memory buffers and length
+  void* buff_ptr = const_cast<void*>(GetMemoryWithOffset(dir_element->second.offset));
+  size_t buff_len = static_cast<size_t>(dir_element->second.length);
+  //set fapl_id to prepare for HDF5 access:
+  if(H5Pset_file_image( fapl_id, buff_ptr, buff_len ) < 0){
+    return errors::Unknown("Cannot create access property list for specified buffer");
+  }
+
+  //pass the access property list to the open routine
+  result->reset(new HDF5File(filename, fapl_id));
+  return Status::OK();
+}
+#endif
 
 Status MemmappedFileSystem::NewReadOnlyMemoryRegionFromFile(
     const string& filename, std::unique_ptr<ReadOnlyMemoryRegion>* result) {

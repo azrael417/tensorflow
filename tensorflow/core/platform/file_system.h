@@ -30,13 +30,18 @@ limitations under the License.
 #include "tensorflow/core/platform/protobuf.h"
 #include "tensorflow/core/platform/types.h"
 
+#ifdef TENSORFLOW_USE_HDF5
+//hdf5-specific stuff
+#include "third_party/hdf5/hdf5.h"
+#endif
+
 #ifdef PLATFORM_WINDOWS
 #undef DeleteFile
 #endif
 
 namespace tensorflow {
 
-class StructuredAccessFile;
+class HDF5File;
 class RandomAccessFile;
 class ReadOnlyMemoryRegion;
 class WritableFile;
@@ -60,6 +65,23 @@ class FileSystem {
   /// and the object should be deleted when is not used.
   virtual Status NewRandomAccessFile(
       const string& fname, std::unique_ptr<RandomAccessFile>* result) = 0;
+  
+#ifdef TENSORFLOW_USE_HDF5
+  /// \brief Creates a brand new structured access HDF5 read-only file with the
+  /// specified name.
+  ///
+  /// On success, stores a FileSystem-dependent access control list 
+  /// and the filename to the new file in *result and returns OK.
+  /// On failure stores NULL in *result and returns non-OK.
+  /// If the file does not exist, returns a non-OK status.
+  ///
+  /// The returned file may be concurrently accessed by multiple threads.
+  ///
+  /// The ownership of the returned HDF5File is passed to the caller
+  /// and the object should be deleted when is not used. 
+  virtual Status NewHDF5File(
+      const string& fname, std::unique_ptr<HDF5File>* result) = 0;
+#endif
 
   /// \brief Creates an object that writes to a new file with the specified
   /// name.
@@ -241,22 +263,49 @@ class RandomAccessFile {
 };
 
 
-/// A file abstraction for performing strutured reads. CSV, HDF5 and other file classes could use that as base class.
-class StructuredAccessFile {
+#ifdef TENSORFLOW_USE_HDF5
+/// HDF5 can deal with different 
+class HDF5File {
  public:
-  StructuredAccessFile() {}
-  virtual ~StructuredAccessFile();
-
-  /// \brief We do not provide a base virtual Read function here since the function arguments
-  /// and return types might differ between different structured files. That said, the corresponding
-  /// structured data reader classes should be used to read these files. 
+  HDF5File() {}
+  HDF5File(const string& fname, const hid_t& fapl_id);
+  ~HDF5File();
+  
+  /// \brief The read function takes a dataset name to read from as well as
+  /// a row_number to specify the corresponding row to read.
   ///
   /// Safe for concurrent use by multiple threads.
-  //virtual Status Read(uint64 offset, size_t n, StringPiece* result, Tensor* output) const = 0;
+  Status Read(const string& dset, const size_t& row_num, StringPiece* result) const;
+  
+  /// \brief This function prepares internal buffers and performs shape and datatype checks on
+  /// the specified dataset. You need to initialize a dataset before reading from it.
+  ///
+  /// Safe for concurrent use by multiple threads.
+  Status InitDataset(const string& dset);
 
  private:
-  TF_DISALLOW_COPY_AND_ASSIGN(StructuredAccessFile);
+  //variables
+  string filename_;
+  hid_t hdf5_fd_;
+  //access property lists
+  hid_t dapl_id_, fapl_id_;
+  
+  struct DatasetInfo{
+    std::vector<hsize_t> dims;
+    hid_t id;
+    hid_t type;
+  };
+  std::map<string, DatasetInfo> dsetinfo;
+  
+  //functions
+  Status hdf5_check_file_exists(const string& fname) const;
+  Status hdf5_check_dataset_exists(const string& dname) const;
+  inline string EncodeTokenASCII(char* buff, const hid_t& type_id) const;
+  string EncodeASCII(const DatasetInfo& info, const hsize_t& buff_size, char* buff) const;
+  
+  TF_DISALLOW_COPY_AND_ASSIGN(HDF5File);
 };
+#endif
 
 
 /// \brief A file abstraction for sequential writing.
@@ -334,6 +383,13 @@ class NullFileSystem : public FileSystem {
       const string& fname, std::unique_ptr<RandomAccessFile>* result) override {
     return errors::Unimplemented("NewRandomAccessFile unimplemented");
   }
+  
+#ifdef TENSORFLOW_USE_HDF5
+  Status NewHDF5File(
+      const string& fname, std::unique_ptr<HDF5File>* result) override {
+    return errors::Unimplemented("NewHDF5File unimplemented");
+  }
+#endif
 
   Status NewWritableFile(const string& fname,
                          std::unique_ptr<WritableFile>* result) override {

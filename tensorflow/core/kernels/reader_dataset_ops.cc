@@ -571,7 +571,7 @@ private:
             //
               // Actually move on to next file.
               const string& next_filename = dataset()->filenames_[current_file_index_];
-              //TF_RETURN_IF_ERROR(ctx->env()->NewRandomAccessFile(next_filename, &file_));
+              TF_RETURN_IF_ERROR(ctx->env()->NewHDF5File(next_filename, &file_));
               //reader_.reset(new io::HDF5Reader(file_.get(), dataset()->datasets_));
             } while (true);
           }
@@ -582,7 +582,7 @@ private:
 
           // `reader_` will borrow the object that `file_` points to, so
           // we must destroy `reader_` before `file_`.
-          std::unique_ptr<StructuredAccessFile> file_ GUARDED_BY(mu_);
+          std::unique_ptr<HDF5File> file_ GUARDED_BY(mu_);
           //std::unique_ptr<io::HDF5Reader> reader_ GUARDED_BY(mu_);
       };
 
