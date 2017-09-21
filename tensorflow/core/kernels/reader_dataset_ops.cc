@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/core/lib/io/inputbuffer.h"
 #include "tensorflow/core/lib/io/random_inputstream.h"
 #include "tensorflow/core/lib/io/record_reader.h"
+#include "tensorflow/core/lib/io/hdf5_reader.h"
 #include "tensorflow/core/lib/io/zlib_compression_options.h"
 #include "tensorflow/core/lib/io/zlib_inputstream.h"
 
@@ -544,35 +545,35 @@ private:
           Status GetNextInternal(IteratorContext* ctx, std::vector<Tensor>* out_tensors, bool* end_of_sequence) override {
             mutex_lock l(mu_);
             do {
-            //  // We are currently processing a file, so try to read the next record.
-            //  if (reader_) {
-            //    Tensor result_tensor(cpu_allocator(), DT_STRING, {});
-            //    Status s = reader_->ReadRecord(&result_tensor.scalar<string>()());
-            //    if (s.ok()) {
-            //      out_tensors->emplace_back(std::move(result_tensor));
-            //      *end_of_sequence = false;
-            //      return Status::OK();
-            //    } else if (!errors::IsOutOfRange(s)) {
-            //      return s;
-            //    }
-            //
-            //    // We have reached the end of the current file, so maybe
-            //    // move on to next file.
-            //    reader_.reset();
-            //    file_.reset();
-            //    ++current_file_index_;
-            //  }
-            //
-            //  // Iteration ends when there are no more files to process.
-            //  if (current_file_index_ == dataset()->filenames_.size()) {
-            //    *end_of_sequence = true;
-            //    return Status::OK();
-            //  }
-            //
+              // We are currently processing a file, so try to read the next record.
+              if (reader_) {
+                Tensor result_tensor(cpu_allocator(), DT_STRING, {});
+                Status s = reader_->ReadRecord(&result_tensor.scalar<string>()());
+                if (s.ok()) {
+                  out_tensors->emplace_back(std::move(result_tensor));
+                  *end_of_sequence = false;
+                  return Status::OK();
+                } else if (!errors::IsOutOfRange(s)) {
+                  return s;
+                }
+            
+                // We have reached the end of the current file, so maybe
+                // move on to next file.
+                reader_.reset();
+                file_.reset();
+                ++current_file_index_;
+              }
+            
+              // Iteration ends when there are no more files to process.
+              if (current_file_index_ == dataset()->filenames_.size()) {
+                *end_of_sequence = true;
+                return Status::OK();
+              }
+            
               // Actually move on to next file.
               const string& next_filename = dataset()->filenames_[current_file_index_];
               TF_RETURN_IF_ERROR(ctx->env()->NewHDF5File(next_filename, &file_));
-              //reader_.reset(new io::HDF5Reader(file_.get(), dataset()->datasets_));
+              reader_.reset(new io::HDF5Reader(file_.get(), dataset()->datasets_));
             } while (true);
           }
 
@@ -583,7 +584,7 @@ private:
           // `reader_` will borrow the object that `file_` points to, so
           // we must destroy `reader_` before `file_`.
           std::unique_ptr<HDF5File> file_ GUARDED_BY(mu_);
-          //std::unique_ptr<io::HDF5Reader> reader_ GUARDED_BY(mu_);
+          std::unique_ptr<io::HDF5Reader> reader_ GUARDED_BY(mu_);
       };
 
       const std::vector<string> filenames_, datasets_;

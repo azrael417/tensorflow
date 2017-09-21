@@ -284,6 +284,7 @@ cc_library(
         "lib/io/proto_encode_helper.h",
         "lib/io/random_inputstream.h",
         "lib/io/record_reader.h",
+        "lib/io/hdf5_reader.h",
         "lib/io/record_writer.h",
         "lib/io/table.h",
         "lib/io/table_builder.h",

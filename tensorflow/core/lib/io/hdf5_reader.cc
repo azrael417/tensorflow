@@ -15,38 +15,46 @@ limitations under the License.
 
 #ifdef TENSORFLOW_USE_HDF5
 
-//#include "tensorflow/core/lib/io/hdf5_reader.h"
-//
-//#include <limits.h>
-//
-////#include "tensorflow/core/lib/core/coding.h"
-////#include "tensorflow/core/lib/core/errors.h"
-////#include "tensorflow/core/lib/hash/crc32c.h"
-////#include "tensorflow/core/lib/io/buffered_inputstream.h"
-////#include "tensorflow/core/lib/io/compression.h"
-////#include "tensorflow/core/lib/io/random_inputstream.h"
-//#include "tensorflow/core/platform/env.h"
-//
-////specific stuff
-//#include "third_party/hdf5/hdf5.h"
-//#include "tensorflow/core/lib/strings/str_util.h"
-//
-//namespace tensorflow {
-//  namespace io {
-//
-//    HDF5Reader::HDF5Reader(RandomAccessFile* file, const std::vector<string>& datasets) : src_(file), datasets_(datasets) {
-//      //First thing to do is to close the handle, because we need to use H5Fopen instead:
-//      
-//    }
-//
-//
-//    Status HDF5Reader::ReadRecord(uint64 line_number, string* record) {
-//  
-//      return Status::OK();
-//    }
-//
-//
-//  }  // namespace io
-//}  // namespace tensorflow
+#include <limits.h>
+#include "third_party/hdf5/hdf5.h"
+
+#include "tensorflow/core/platform/env.h"
+#include "tensorflow/core/lib/strings/str_util.h"
+#include "tensorflow/core/lib/strings/strcat.h"
+#include "tensorflow/core/lib/io/hdf5_reader.h"
+
+namespace tensorflow {
+  namespace io {
+
+    HDF5Reader::HDF5Reader(HDF5File* file, const std::vector<string>& datasets) : src_(file), datasets_(datasets) {
+      //initialize all the datasets we are going to read from:
+      for(unsigned int d=0; d<datasets_.size(); d++) src_->InitDataset(datasets_[d]);
+      //initialize current line to zero
+      current_line_ = 0;
+    }
+
+    Status HDF5Reader::ReadRecord(string* record) {
+      Status s;
+      
+      //read from the first dataset
+      StringPiece tmprecord, token;
+      s = src_->Read(datasets_[0], current_line_, &tmprecord);
+      if( !s.ok() ) return s;
+      for(unsigned int d=1; d<datasets_.size(); d++){
+        s = src_->Read(datasets_[d],current_line_, &token);
+        if( !s.ok() ) return s;
+        tmprecord = strings::StrCat(tmprecord,":",token);
+      }
+      current_line_++;
+      
+      //cast string pieces to string
+      *record = tmprecord.ToString();
+      s = Status::OK();
+      
+      return s;
+    }
+
+  }  // namespace io
+}  // namespace tensorflow
 
 #endif
