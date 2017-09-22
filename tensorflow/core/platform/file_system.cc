@@ -341,7 +341,6 @@ string HDF5File::EncodeASCII(const DatasetInfo& info, const hsize_t& buff_size, 
 
 
 HDF5File::HDF5File(const string& fname, const hid_t& fapl_id) : filename_(fname), fapl_id_(fapl_id) {
-    
   //default property list for data access
   dapl_id_ = H5Pcreate(H5P_DATASET_XFER);
   
@@ -354,7 +353,6 @@ HDF5File::HDF5File(const string& fname, const hid_t& fapl_id) : filename_(fname)
   
   
 HDF5File::~HDF5File() { 
-    
   //close the objects I still have a handle on:
   std::map<string, DatasetInfo>::iterator it;
   for(it=dsetinfo.begin(); it!=dsetinfo.end(); ++it){
@@ -426,11 +424,11 @@ Status HDF5File::InitDataset(const string& dset){
 }
 
 
-Status HDF5File::Read(const string& dset, const size_t& row_num, StringPiece* result) const {
+Status HDF5File::Read(const string& dset, const size_t& row_num, string* result) const {
   Status s;
     
   //if dataset not initialized, do it now:
-  if(dsetinfo.find( dset ) != dsetinfo.end()){
+  if(dsetinfo.find( dset ) == dsetinfo.end()){
     s = Status(error::FAILED_PRECONDITION,"you need to initialize a dataset first using the InitDataset(<name>) member function before reading from it");
     return s;
   }
@@ -441,15 +439,19 @@ Status HDF5File::Read(const string& dset, const size_t& row_num, StringPiece* re
     
   //check if we are already wrapping around:
   if(row_num>=info.dims[0]) return Status(error::OUT_OF_RANGE,"row number specified bigger than the 0-dimension of the dataset");
-    
+  
+  //get the size of the array 
   hsize_t buff_size = 1;
   for(unsigned int d=1; d<info.dims.size(); d++) buff_size *= info.dims[d];
-    
+  
+  //get the size of the type
+  int type_size=H5Tget_size(info.type);
+  
   //allocate buffers
-  char* buff = new char[buff_size];
+  char* buff = new char[buff_size*type_size];
     
   //set hyperslab parameters
-  std::vector<hsize_t> start, count;
+  std::vector<hsize_t> start(info.dims.size()), count(info.dims.size());
   //read one row only
   start[0] = static_cast<hsize_t>(row_num);
   count[0] = 1;
@@ -485,8 +487,10 @@ Status HDF5File::Read(const string& dset, const size_t& row_num, StringPiece* re
   H5Sclose(file_space);
   H5Sclose(mem_space);
 
-  string tmpresult = EncodeASCII(info,buff_size,buff);
-  *result = StringPiece(tmpresult);
+  //copy output into result string
+  *result = EncodeASCII(info,buff_size,buff);
+  
+  //status is OK
   s = Status::OK();
     
   //free buffer

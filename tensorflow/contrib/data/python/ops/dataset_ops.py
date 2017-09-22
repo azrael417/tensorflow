@@ -2346,7 +2346,7 @@ class HDF5Dataset(Dataset):
     self._datasets = ops.convert_to_tensor(datasets, name="datasets")
 
   def make_dataset_resource(self):
-    return gen_dataset_ops.tf_hdf5_dataset(self._filenames, self._datasets)
+    return gen_dataset_ops.hdf5_dataset(self._filenames, self._datasets)
 
   @property
   def output_shapes(self):

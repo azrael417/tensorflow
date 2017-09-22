@@ -27,8 +27,14 @@ namespace tensorflow {
   namespace io {
 
     HDF5Reader::HDF5Reader(HDF5File* file, const std::vector<string>& datasets) : src_(file), datasets_(datasets) {
+      Status s;
       //initialize all the datasets we are going to read from:
-      for(unsigned int d=0; d<datasets_.size(); d++) src_->InitDataset(datasets_[d]);
+      for(unsigned int d=0; d<datasets_.size(); d++){
+        s = src_->InitDataset(datasets_[d]);
+        if(!s.ok()){
+          LOG(FATAL) << "Dataset " << datasets_[d] << " could not be initialized for file " << src_->GetFilename();
+        }
+      }
       //initialize current line to zero
       current_line_ = 0;
     }
@@ -37,18 +43,17 @@ namespace tensorflow {
       Status s;
       
       //read from the first dataset
-      StringPiece tmprecord, token;
-      s = src_->Read(datasets_[0], current_line_, &tmprecord);
+      string token;
+      s = src_->Read(datasets_[0], current_line_, record);
       if( !s.ok() ) return s;
       for(unsigned int d=1; d<datasets_.size(); d++){
         s = src_->Read(datasets_[d],current_line_, &token);
         if( !s.ok() ) return s;
-        tmprecord = strings::StrCat(tmprecord,":",token);
+        *record = strings::StrCat(*record,":",token);
       }
       current_line_++;
       
-      //cast string pieces to string
-      *record = tmprecord.ToString();
+      //update status
       s = Status::OK();
       
       return s;

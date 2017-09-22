@@ -267,7 +267,7 @@ class RandomAccessFile {
 /// HDF5 can deal with different 
 class HDF5File {
  public:
-  HDF5File() {}
+  HDF5File() { filename_ = ""; }
   HDF5File(const string& fname, const hid_t& fapl_id);
   ~HDF5File();
   
@@ -275,14 +275,19 @@ class HDF5File {
   /// a row_number to specify the corresponding row to read.
   ///
   /// Safe for concurrent use by multiple threads.
-  Status Read(const string& dset, const size_t& row_num, StringPiece* result) const;
+  Status Read(const string& dset, const size_t& row_num, string* result) const;
   
   /// \brief This function prepares internal buffers and performs shape and datatype checks on
   /// the specified dataset. You need to initialize a dataset before reading from it.
   ///
   /// Safe for concurrent use by multiple threads.
   Status InitDataset(const string& dset);
-
+  
+  /// \brief This function prints the name of the HDF5 file currently opened.
+  ///
+  /// Safe for concurrent use by multiple threads.
+  string GetFilename() const{ return filename_; }
+  
  private:
   //variables
   string filename_;
