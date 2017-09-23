@@ -43,13 +43,14 @@ namespace tensorflow {
       Status s;
       
       //read from the first dataset
+      string dummy;
       string token;
-      s = src_->Read(datasets_[0], current_line_, record);
+      s = src_->Read(datasets_[0], current_line_, record, &dummy);
       if( !s.ok() ) return s;
       for(unsigned int d=1; d<datasets_.size(); d++){
-        s = src_->Read(datasets_[d],current_line_, &token);
+        s = src_->Read(datasets_[d],current_line_, &token, &dummy);
         if( !s.ok() ) return s;
-        *record = strings::StrCat(*record,":",token);
+        strings::StrAppend(record,":",token);
       }
       current_line_++;
       

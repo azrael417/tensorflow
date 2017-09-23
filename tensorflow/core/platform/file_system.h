@@ -275,7 +275,7 @@ class HDF5File {
   /// a row_number to specify the corresponding row to read.
   ///
   /// Safe for concurrent use by multiple threads.
-  Status Read(const string& dset, const size_t& row_num, string* result) const;
+  Status Read(const string& dset, const size_t& row_num, string* res, string* result) const;
   
   /// \brief This function prepares internal buffers and performs shape and datatype checks on
   /// the specified dataset. You need to initialize a dataset before reading from it.
@@ -296,9 +296,13 @@ class HDF5File {
   hid_t dapl_id_, fapl_id_;
   
   struct DatasetInfo{
+    hsize_t ndims;
     std::vector<hsize_t> dims;
+    hsize_t dset_size, type_size;
     hid_t id;
     hid_t type;
+    char* buff;
+    string type_enc;
   };
   std::map<string, DatasetInfo> dsetinfo;
   
@@ -306,7 +310,8 @@ class HDF5File {
   Status hdf5_check_file_exists(const string& fname) const;
   Status hdf5_check_dataset_exists(const string& dname) const;
   inline string EncodeTokenASCII(char* buff, const hid_t& type_id) const;
-  string EncodeASCII(const DatasetInfo& info, const hsize_t& buff_size, char* buff) const;
+  string EncodeASCII(const DatasetInfo* info) const;
+  string EncodeBinary(const DatasetInfo* info) const;
   
   TF_DISALLOW_COPY_AND_ASSIGN(HDF5File);
 };

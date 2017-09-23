@@ -29,6 +29,11 @@ limitations under the License.
 #include "tensorflow/core/platform/platform.h"
 #include "tensorflow/core/platform/protobuf.h"
 
+//DEBUG
+#include <chrono>
+//DEBUG
+
+
 namespace tensorflow {
 
 namespace {
@@ -320,23 +325,41 @@ inline string HDF5File::EncodeTokenASCII(char* buff, const hid_t& type_id) const
 }
   
   
-string HDF5File::EncodeASCII(const DatasetInfo& info, const hsize_t& buff_size, char* buff) const{
+string HDF5File::EncodeASCII(const DatasetInfo* info) const{
   //create output string
   //create dimensions
-  string result = strings::StrCat("(", info.dims[1]);
-  for(unsigned int d=2; d<info.dims.size(); ++d){
-    result = strings::StrCat(result, ",", info.dims[d]);
+  string result = strings::StrCat("(", info->dims[1]);
+  for(unsigned int d=2; d<(info->ndims+1); ++d){
+    strings::StrAppend(&result, ",", info->dims[d]);
   }
-  result = strings::StrCat(result, ")[");
+  strings::StrAppend(&result, ")[");
   //now get the data
-  int typesize = H5Tget_size(info.type);
-  result = strings::StrCat(result, EncodeTokenASCII(&(buff[0]), info.type));
-  for(unsigned int r=1; r<buff_size; ++r){
-    result = strings::StrCat(result, ",", EncodeTokenASCII(&(buff[r*typesize]), info.type));
+  strings::StrAppend(&result, EncodeTokenASCII(&(info->buff[0]), info->type));
+  for(unsigned int r=1; r<info->dset_size; ++r){
+    strings::StrAppend(&result, ",", EncodeTokenASCII(&(info->buff[r*info->type_size]), info->type));
   }
-  result = strings::StrCat(result, "]");
+  strings::StrAppend(&result, "]");
         
   return result;
+}
+
+
+//encodes the record the following way: 
+//buff = type_buff_size|type_buff(buff_size)|num_dims|dims(num_dims)|data(prod_i dims(i))
+string HDF5File::EncodeBinary(const DatasetInfo* info) const{
+  //datatype size of buffer
+  size_t tsize = info->type_enc.size();
+  StringPiece ntype_piece = StringPiece( reinterpret_cast<const char*>(&tsize), sizeof(tsize) );
+  //datatype
+  StringPiece type_piece = StringPiece( info->type_enc.c_str(), tsize );
+  //number of dimensions 
+  StringPiece ndims_piece = StringPiece( reinterpret_cast<const char*>(&info->ndims), sizeof(info->ndims) );
+  //mode sizes
+  StringPiece dims_piece = StringPiece( reinterpret_cast<const char*>(&info->dims[1]), (info->ndims)*sizeof(info->dims[1]) );
+  //data
+  StringPiece data_piece = StringPiece( info->buff, (info->type_size)*(info->dset_size) );
+  //concatenate everything
+  return strings::StrCat( ntype_piece, type_piece, ndims_piece, dims_piece, data_piece );
 }
 
 
@@ -356,6 +379,8 @@ HDF5File::~HDF5File() {
   //close the objects I still have a handle on:
   std::map<string, DatasetInfo>::iterator it;
   for(it=dsetinfo.begin(); it!=dsetinfo.end(); ++it){
+    //free buffers
+    delete [] it->second.buff;
     //close type
     H5Tclose(it->second.type);
     //close dataset
@@ -410,10 +435,28 @@ Status HDF5File::InitDataset(const string& dset){
   
   //if vector is provided, attach singleton dimension.
   if(ndims==1) info.dims.push_back(1);
+  //in here we store the number of dims - 1 (first dim is batched) for the string piece:
+  info.ndims = info.dims.size()-1;
   
-  //check datatype, only numeric types supported so far:
+  //get datatype, only numeric types supported so far:
   info.type = H5Tget_native_type(H5Dget_type(info.id),H5T_DIR_DESCEND);
-
+  //encode the type into a string which will be prepended to the output
+  size_t tencsize=0;
+  H5Tencode(info.type, NULL, &tencsize);
+  char* tmpstr = new char[tencsize];
+  H5Tencode(info.type, tmpstr, &tencsize);
+  info.type_enc=string(tmpstr, tencsize);
+  delete [] tmpstr;
+  
+  //determine size and allocate buffers
+  hsize_t buff_size = 1;
+  for(unsigned int d=1; d<info.dims.size(); d++) buff_size *= info.dims[d];
+  info.dset_size = buff_size;
+  info.type_size = H5Tget_size(info.type);
+  
+  //allocate buffers
+  info.buff = new char[info.dset_size*info.type_size];
+  
   //add to hashmap
   dsetinfo[dset] = info;
   
@@ -424,9 +467,13 @@ Status HDF5File::InitDataset(const string& dset){
 }
 
 
-Status HDF5File::Read(const string& dset, const size_t& row_num, string* result) const {
+Status HDF5File::Read(const string& dset, const size_t& row_num, string* res, string* result) const {
   Status s;
-    
+  
+  //DEBUG
+  auto t1read = std::chrono::high_resolution_clock::now();
+  //DEBUG
+  
   //if dataset not initialized, do it now:
   if(dsetinfo.find( dset ) == dsetinfo.end()){
     s = Status(error::FAILED_PRECONDITION,"you need to initialize a dataset first using the InitDataset(<name>) member function before reading from it");
@@ -435,67 +482,78 @@ Status HDF5File::Read(const string& dset, const size_t& row_num, string* result)
   if(s != Status::OK()) return s;
   
   //get size needed for buffer
-  DatasetInfo info = dsetinfo.at(dset);
+  const DatasetInfo* info = &(dsetinfo.at(dset));
     
   //check if we are already wrapping around:
-  if(row_num>=info.dims[0]) return Status(error::OUT_OF_RANGE,"row number specified bigger than the 0-dimension of the dataset");
-  
-  //get the size of the array 
-  hsize_t buff_size = 1;
-  for(unsigned int d=1; d<info.dims.size(); d++) buff_size *= info.dims[d];
-  
-  //get the size of the type
-  int type_size=H5Tget_size(info.type);
-  
-  //allocate buffers
-  char* buff = new char[buff_size*type_size];
-    
+  if(row_num>=info->dims[0]) return Status(error::OUT_OF_RANGE,"row number specified bigger than the 0-dimension of the dataset");
+
   //set hyperslab parameters
-  std::vector<hsize_t> start(info.dims.size()), count(info.dims.size());
+  std::vector<hsize_t> start(info->dims.size()), count(info->dims.size());
   //read one row only
   start[0] = static_cast<hsize_t>(row_num);
   count[0] = 1;
   //read the full thing for the rest
-  for(unsigned int d=1; d<info.dims.size(); ++d){
+  for(unsigned int d=1; d<info->dims.size(); ++d){
     start[d] = 0;
-    count[d] = info.dims[d];
+    count[d] = info->dims[d];
   }
     
   //no checks here as those were already performed before
-  hid_t file_space = H5Dget_space(info.id);
+  hid_t file_space = H5Dget_space(info->id);
   H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL);
-  hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(info.dims.size()-1), &(info.dims[1]), NULL);
-          
+  hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(info->ndims), &(info->dims[1]), NULL);
+
   //read from the slab
-  if( H5Tequal(info.type, H5T_NATIVE_FLOAT) ){
-    H5Dread(info.id, info.type, mem_space, file_space, dapl_id_, reinterpret_cast<float*>(buff));
+  if( H5Tequal(info->type, H5T_NATIVE_FLOAT) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<float*>(info->buff));
   }
-  else if( H5Tequal(info.type, H5T_NATIVE_INT) ){
-    H5Dread(info.id, info.type, mem_space, file_space, dapl_id_, reinterpret_cast<int*>(buff));
+  else if( H5Tequal(info->type, H5T_NATIVE_INT) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<int*>(info->buff));
   }
-  else if( H5Tequal(info.type, H5T_NATIVE_LONG) ){
-    H5Dread(info.id, info.type, mem_space, file_space, dapl_id_, reinterpret_cast<long*>(buff));
+  else if( H5Tequal(info->type, H5T_NATIVE_LONG) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<long*>(info->buff));
   }
-  else if( H5Tequal(info.type, H5T_NATIVE_DOUBLE) ){
-    H5Dread(info.id, info.type, mem_space, file_space, dapl_id_, reinterpret_cast<double*>(buff));
+  else if( H5Tequal(info->type, H5T_NATIVE_DOUBLE) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<double*>(info->buff));
   }
   else{
     s = Status(error::INVALID_ARGUMENT," error, datatype currently not supported.");
   }
+  //DEBUG
+  auto t2read = std::chrono::high_resolution_clock::now();
+  //DEBUG
 
   //close the spaces:
   H5Sclose(file_space);
   H5Sclose(mem_space);
 
-  //copy output into result string
-  *result = EncodeASCII(info,buff_size,buff);
+  
+  //encode binary
+  //DEBUG
+  auto t1encb = std::chrono::high_resolution_clock::now();
+  //DEBUG
+  *result = EncodeBinary(info);
+  //DEBUG
+  auto t2encb = std::chrono::high_resolution_clock::now();
+  //DEBUG
+  
+  //encode ascii for debugging
+  //DEBUG
+  auto t1enc = std::chrono::high_resolution_clock::now();
+  //DEBUG
+  *res = EncodeASCII(info);
+  //DEBUG
+  auto t2enc = std::chrono::high_resolution_clock::now();
+  //DEBUG
+  
+  //DEBUG
+  std::cout << "READING DATA: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2read-t1read).count() << " ms\n";
+  std::cout << "ENCODE ASCII: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2enc-t1enc).count() << " ms\n";
+  std::cout << "ENCODE BINARY: " << std::chrono::duration_cast<std::chrono::milliseconds>(t2encb-t1encb).count() << " ms\n";
+  //DEBUG
   
   //status is OK
   s = Status::OK();
-    
-  //free buffer
-  delete [] buff;
-    
   return s;
 }
 #endif
