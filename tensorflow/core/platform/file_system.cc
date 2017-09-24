@@ -346,9 +346,10 @@ string HDF5File::EncodeASCII(const DatasetInfo* info) const{
 
 //encodes the record the following way: 
 //buff = type_buff_size|type_buff(buff_size)|num_dims|dims(num_dims)|data(prod_i dims(i))
+// all size types are hsize_t.
 string HDF5File::EncodeBinary(const DatasetInfo* info) const{
   //datatype size of buffer
-  size_t tsize = info->type_enc.size();
+  hsize_t tsize = static_cast<hsize_t>(info->type_enc.size());
   StringPiece ntype_piece = StringPiece( reinterpret_cast<const char*>(&tsize), sizeof(tsize) );
   //datatype
   StringPiece type_piece = StringPiece( info->type_enc.c_str(), tsize );

@@ -313,6 +313,9 @@ class HDF5File {
   string EncodeASCII(const DatasetInfo* info) const;
   string EncodeBinary(const DatasetInfo* info) const;
   
+  //hdf5 decoder is friend class, because it needs to access DatasetInfo structure
+  friend class DecodeHDF5Op;
+  
   TF_DISALLOW_COPY_AND_ASSIGN(HDF5File);
 };
 #endif
