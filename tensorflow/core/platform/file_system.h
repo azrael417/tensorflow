@@ -309,7 +309,6 @@ class HDF5File {
   //functions
   Status hdf5_check_file_exists(const string& fname) const;
   Status hdf5_check_dataset_exists(const string& dname) const;
-  inline string EncodeTokenASCII(char* buff, const hid_t& type_id) const;
   string EncodeBinary(const DatasetInfo* info) const;
   
   //hdf5 decoder is friend class, because it needs to access DatasetInfo structure
