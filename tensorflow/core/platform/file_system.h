@@ -275,7 +275,7 @@ class HDF5File {
   /// a row_number to specify the corresponding row to read.
   ///
   /// Safe for concurrent use by multiple threads.
-  Status Read(const string& dset, const size_t& row_num, string* res, string* result) const;
+  Status Read(const string& dset, const size_t& row_num, string* result) const;
   
   /// \brief This function prepares internal buffers and performs shape and datatype checks on
   /// the specified dataset. You need to initialize a dataset before reading from it.
@@ -310,7 +310,6 @@ class HDF5File {
   Status hdf5_check_file_exists(const string& fname) const;
   Status hdf5_check_dataset_exists(const string& dname) const;
   inline string EncodeTokenASCII(char* buff, const hid_t& type_id) const;
-  string EncodeASCII(const DatasetInfo* info) const;
   string EncodeBinary(const DatasetInfo* info) const;
   
   //hdf5 decoder is friend class, because it needs to access DatasetInfo structure

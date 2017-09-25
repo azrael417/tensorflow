@@ -16,201 +16,119 @@ limitations under the License.
 #ifdef TENSORFLOW_USE_HDF5
 
 // See docs in ../ops/parsing_ops.cc.
-#include <vector>
-#include "tensorflow/core/framework/op_kernel.h"
-#include "tensorflow/core/framework/tensor.h"
-#include "tensorflow/core/framework/tensor_shape.h"
-#include "tensorflow/core/framework/types.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/strings/numbers.h"
-
-//hdf5-specific stuff
-#include "third_party/hdf5/hdf5.h"
+#include "tensorflow/core/kernels/decode_hdf5_op.h"
 
 
 namespace tensorflow {
 
-  class DecodeHDF5Op : public OpKernel {
-  public:
-    explicit DecodeHDF5Op(OpKernelConstruction* ctx) : OpKernel(ctx) {
-        
-      OP_REQUIRES_OK(ctx, ctx->GetAttr("OUT_TYPE", &out_type_));
-      OP_REQUIRES(ctx, out_type_.size() < std::numeric_limits<int>::max(),
-      errors::InvalidArgument("Out type too large"));
-    }
-
-    void Compute(OpKernelContext* ctx) override {
-      ComputeASCII(ctx);
-    }
-
-  private:
-    std::vector<DataType> out_type_;
     
-    void ComputeBinary(OpKernelContext* ctx) {
-      const Tensor* records;
-      OpInputList record_defaults;
-    
-      //get records
-      OP_REQUIRES_OK(ctx, ctx->input("records", &records));
-    
-      //make them flat out:
-      auto records_t = records->flat<string>();
-      int64 records_size = records_t.size();
-
-      std::vector<HDF5File::DatasetInfo> recs;
-      for (int64 i = 0; i < records_size; ++i) {
-        std::vector<HDF5File::DatasetInfo> tmprecs = SplitRecord(records_t(i));
-        recs.insert(recs.end(), tmprecs.begin(), tmprecs.end());
-      }
-      OP_REQUIRES(ctx, recs.size()==out_type_.size(), errors::InvalidArgument("Error, number of tensors in recordstring does not match the record format specified."));
-    
-      OpOutputList output;
-      OP_REQUIRES_OK(ctx, ctx->output_list("output", &output));
-    
-      for (int i = 0; i < static_cast<int>(out_type_.size()); ++i) {
-        Tensor* out = nullptr;
-      
-        ////get the tensor shapes:
-        //TensorShape shape;
-        //OP_REQUIRES_OK(ctx, ExtractShapeBinary(shape, recs[i]));
-        //OP_REQUIRES_OK(ctx, output.allocate(i, shape, &out));
-        //
-        ////fill values:
-        //OP_REQUIRES_OK(ctx, ExtractValuesBinary((*output[i]), out_type_[i], recs[i]));
-      }
-    }
-    
-    //the format is:
-    // rec = num_buffs|buffs(num_buffs)
-    // where each buff has the following data layout:
-    // buff = type_buff_size|type_buff(buff_size)|num_dims|dims(num_dims)|data(prod_i dims(i))
-    // this routine should just split into individual buffers so that we can parse them one by one
-    // later. We are going to use strings because we cannot access the buffer directly.
-    // it would be better if we could use StringPiece here instead of string but I will
-    // leave that for later optimization
-    std::vector<HDF5File::DatasetInfo> SplitRecord(const string& record){
-      //create pointer to object for easy iteration
-      //string* recpt = &record;
-      ////first, check how many buffers are in that record:
-      //size_t num_buffs = *reinterpret_cast<hsize_t>(recpt);
-      //recpt+=sizeof(hsize_t);
-      //
-      ////allocate result vector
-      //std::vector<string> result(num_buffs);
-      
-      //
-      
-    }
-    
-    void ComputeASCII(OpKernelContext* ctx) {
-      const Tensor* records;
-      OpInputList record_defaults;
-    
-      //get records
-      OP_REQUIRES_OK(ctx, ctx->input("records", &records));
-    
-      //make them flat out:
-      auto records_t = records->flat<string>();
-      int64 records_size = records_t.size();
-
-      std::vector<string> recs;
-      for (int64 i = 0; i < records_size; ++i) {
-        std::vector<string> tmprecs = str_util::Split(records_t(i), ":");
-        recs.insert(recs.end(), tmprecs.begin(), tmprecs.end());
-      }
-      OP_REQUIRES(ctx, recs.size()==out_type_.size(), errors::InvalidArgument("Error, number of tensors in recordstring does not match the record format specified."));
-    
-      OpOutputList output;
-      OP_REQUIRES_OK(ctx, ctx->output_list("output", &output));
-    
-      for (int i = 0; i < static_cast<int>(out_type_.size()); ++i) {
-        Tensor* out = nullptr;
-      
-        //get the tensor shapes:
-        TensorShape shape;
-        OP_REQUIRES_OK(ctx, ExtractShapeASCII(shape, recs[i]));
-        OP_REQUIRES_OK(ctx, output.allocate(i, shape, &out));
-      
-        //fill values:
-        OP_REQUIRES_OK(ctx, ExtractValuesASCII((*output[i]), out_type_[i], recs[i]));
-      }
-    }
-    
-    //extract shape from record string
-    Status ExtractShapeASCII(TensorShape& shape, const string& record){
-      auto recordvec = str_util::Split(record, "[");
-      CHECK(recordvec.size()==2);
-    
-      //clear shape
-      shape.Clear();
-      //infer dims
-      string shapestring = recordvec[0];
-      shapestring = str_util::StringReplace(shapestring, "(", "", true);
-      shapestring = str_util::StringReplace(shapestring, ")", "", true);
-      auto dims = str_util::Split(shapestring, ",");
-      for(unsigned int d=0; d<dims.size(); d++){
-        long long dimsize;
-        CHECK(strings::safe_strto64(dims[d], &dimsize));
-        shape.AddDim(dimsize);
-      }
-      return Status::OK();
-    }
+  void DecodeHDF5Op::Compute(OpKernelContext* ctx) {
+    const Tensor* records;
+    OpInputList record_defaults;
   
-    //extract the content
-    Status ExtractValuesASCII(Tensor& tensor, const DataType& dtype, const string& record){
-      auto recordvec = str_util::Split(record, ")");
-      //parse values
-      string valuestring = recordvec[1];
-      valuestring = str_util::StringReplace(valuestring, "[", "", true);
-      valuestring = str_util::StringReplace(valuestring, "]", "", true);
-      auto values = str_util::Split(valuestring, ",");
+    //get records
+    OP_REQUIRES_OK(ctx, ctx->input("records", &records));
+  
+    //make them flat out:
+    auto records_t = records->flat<string>();
+    int64 records_size = records_t.size();
+  
+    std::vector<HDF5File::DatasetInfo> recs;
+    for (int64 i = 0; i < records_size; ++i) {
+      std::vector<HDF5File::DatasetInfo> tmprecs = ParseRecord(records_t(i));
+      recs.insert(recs.end(), tmprecs.begin(), tmprecs.end());
+    }
+    OP_REQUIRES(ctx, recs.size()==out_type_.size(), errors::InvalidArgument("Error, number of tensors in recordstring does not match the record format specified."));
+  
+    OpOutputList output;
+    OP_REQUIRES_OK(ctx, ctx->output_list("output", &output));
+  
+    for (int i = 0; i < static_cast<int>(out_type_.size()); ++i) {
+      Tensor* out = nullptr;
     
-      CHECK(values.size()==tensor.shape().num_elements());
-      
-      //switch datatypes
-      switch (dtype) {
+      //get the tensor shapes:
+      TensorShape shape;
+      for(unsigned int d=0; d<recs[i].ndims; d++){
+        shape.AddDim(recs[i].dims[d]);
+      }
+      OP_REQUIRES_OK(ctx, output.allocate(i, shape, &out));
+  
+      //fill values:
+      switch (out_type_[i]) {
         case DT_INT32: {
-          auto tensor_t = tensor.flat<int32>();
-          for (unsigned int i = 0; i < values.size(); ++i) {
-            int32 val;
-            CHECK(strings::safe_strto32(values[i].c_str(), &val));
-            tensor_t(i) = val;
-          }
+          OP_REQUIRES_OK(ctx, ExtractValuesBinary<int32>((*output[i]), recs[i]));
           break;
         }
         case DT_INT64: {
-          auto tensor_t = tensor.flat<int64>();
-          for (unsigned int i = 0; i < values.size(); ++i) {
-            int64 val;
-            CHECK(strings::safe_strto64(values[i].c_str(), &val));
-            tensor_t(i) = val;
-          }
+          OP_REQUIRES_OK(ctx, ExtractValuesBinary<int64>((*output[i]), recs[i]));
           break;
         }
         case DT_FLOAT: {
-          auto tensor_t = tensor.flat<float>();
-          for (unsigned int i = 0; i < values.size(); ++i) {
-            float val;
-            CHECK(strings::safe_strtof(values[i].c_str(), &val));
-            tensor_t(i) = val;
-          }
+          OP_REQUIRES_OK(ctx, ExtractValuesBinary<float>((*output[i]), recs[i]));
           break;
         }
         case DT_DOUBLE: {
-          auto tensor_t = tensor.flat<double>();
-          for (unsigned int i = 0; i < values.size(); ++i) {
-            double val;
-            CHECK(strings::safe_strtod(values[i].c_str(), &val));
-            tensor_t(i) = val;
-          }
+          OP_REQUIRES_OK(ctx, ExtractValuesBinary<double>((*output[i]), recs[i]));
           break;
         }
-        default:
-          return errors::InvalidArgument("hdf5: data type ", dtype, " not supported.");
+        default: {
+          OP_REQUIRES_OK(ctx, errors::InvalidArgument("data type ", out_type_[i], " not supported."));
+        }
       }
-      return Status::OK();
     }
-  };
+  }
+
+  //the format is:
+  // rec = num_buffs|buffs(num_buffs)
+  // where each buff has the following data layout:
+  // buff = type_buff_size|type_buff(buff_size)|num_dims|dims(num_dims)|data(prod_i dims(i))
+  // this routine should just split into individual buffers so that we can parse them one by one
+  // later. We are going to use strings because we cannot access the buffer directly.
+  // it would be better if we could use StringPiece here instead of string but I will
+  // leave that for later optimization
+  std::vector<HDF5File::DatasetInfo> DecodeHDF5Op::ParseRecord(const string& record){
+    //create offset for keeping track of index
+    hsize_t offset = 0;
+    //first, check how many buffers are in that record:
+    size_t num_buffs = *(reinterpret_cast<const hsize_t*>(&record[offset]));
+    offset += sizeof(hsize_t);
+    
+    ////allocate result vector
+    std::vector<HDF5File::DatasetInfo> result;
+    for(size_t d=0; d<num_buffs; ++d){
+      
+      // get type
+      HDF5File::DatasetInfo info;
+      hsize_t type_enc_size = *(reinterpret_cast<const hsize_t*>(&record[offset]));
+      offset += sizeof(hsize_t);
+      char* tmpbuff = new char[type_enc_size];
+      memcpy(tmpbuff,&record[offset],type_enc_size);
+      offset += type_enc_size;
+      info.type_enc = string(tmpbuff,type_enc_size);
+      delete [] tmpbuff;
+      info.type = H5Tdecode(reinterpret_cast<const unsigned char*>(info.type_enc.c_str()));
+      info.type_size = H5Tget_size(info.type);
+      
+      //get dims:
+      info.ndims = *(reinterpret_cast<const hsize_t*>(&record[offset]));
+      offset += sizeof(hsize_t);
+      info.dims.resize(info.ndims);
+      memcpy(&info.dims[0],&record[offset],info.ndims*sizeof(hsize_t));
+      offset += info.ndims*sizeof(hsize_t);
+      
+      //get size of dataset
+      info.dset_size=1;
+      for(unsigned int i=0; i<info.ndims; i++) info.dset_size*=info.dims[i];
+      info.buff = const_cast<char*>(&record[offset]);
+      offset += info.dset_size*info.type_size;
+      
+      //assign to result vector
+      result.push_back(info);
+    }
+    
+    //return result
+    return result;
+  }
 
   REGISTER_KERNEL_BUILDER(Name("DecodeHDF5").Device(DEVICE_CPU), DecodeHDF5Op);
 

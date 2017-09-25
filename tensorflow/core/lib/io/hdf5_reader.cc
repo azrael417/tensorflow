@@ -44,16 +44,15 @@ namespace tensorflow {
       
       //read from the first dataset
       hsize_t dsize = static_cast<hsize_t>(datasets_.size());
-      string dummy, dummyrecord(reinterpret_cast<char*>(&dsize), sizeof(hsize_t));
+      *record = string(reinterpret_cast<char*>(&dsize), sizeof(hsize_t));
       string token;
-      s = src_->Read(datasets_[0], current_line_, record, &dummy);
+      s = src_->Read(datasets_[0], current_line_, &token);
       if( !s.ok() ) return s;
-      strings::StrAppend(&dummyrecord, dummy);
+      strings::StrAppend(record, token);
       for(unsigned int d=1; d<dsize; d++){
-        s = src_->Read(datasets_[d],current_line_, &token, &dummy);
+        s = src_->Read(datasets_[d],current_line_, &token);
         if( !s.ok() ) return s;
-        strings::StrAppend(record,":",token);
-        strings::StrAppend(&dummyrecord, dummy);
+        strings::StrAppend(record,token);
       }
       current_line_++;
       
