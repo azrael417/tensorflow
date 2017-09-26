@@ -17,6 +17,7 @@
 @@Dataset
 @@Iterator
 @@TFRecordDataset
+@@HDF5Dataset
 @@FixedLengthRecordDataset
 @@TextLineDataset
 """
@@ -31,6 +32,7 @@ from tensorflow.python.data.ops.dataset_ops import FixedLengthRecordDataset
 from tensorflow.python.data.ops.dataset_ops import Iterator
 from tensorflow.python.data.ops.dataset_ops import TextLineDataset
 from tensorflow.python.data.ops.dataset_ops import TFRecordDataset
+from tensorflow.python.data.ops.dataset_ops import HDF5Dataset
 # pylint: enable=unused-import
 
 from tensorflow.python.util.all_util import remove_undocumented

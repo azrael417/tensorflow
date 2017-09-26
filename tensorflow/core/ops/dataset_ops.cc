@@ -529,7 +529,8 @@ buffer_size: A scalar representing the number of bytes to buffer. A value of
 REGISTER_OP("HDF5Dataset")
     .Input("filenames: string")
     .Input("datasets: string")
-    .Output("handle: resource")
+    .Output("handle: variant")
+    .SetIsStateful()
     .SetShapeFn(shape_inference::ScalarShape)
     .Doc(R"doc(
 Creates a dataset that emits the records from one or more HDF5 files.

@@ -1409,6 +1409,7 @@ cc_library(
                   "SNAPPY",
               ] + tf_additional_verbs_lib_defines() +
               tf_additional_mpi_lib_defines() +
+	      tf_additional_hdf5_lib_defines() +
               tf_additional_gdr_lib_defines(),
     linkopts = select({
         "//tensorflow:freebsd": [],
@@ -1422,7 +1423,7 @@ cc_library(
     deps = tf_additional_lib_deps() + [
         "//third_party/eigen3",
         "//tensorflow/core/platform/default/build_config:platformlib",
-    ] + if_static([":lib_internal_impl"]),
+    ] + if_static([":lib_internal_impl"]) + if_hdf5(["//third_party/hdf5",]),
 )
 
 cc_library(
@@ -1482,6 +1483,7 @@ cc_library(
 #        ],
 #    }),
 #=======
+    defines = tf_additional_hdf5_lib_defines(),
 #>>>>>>> origin/master
     deps = tf_additional_lib_deps() + [
         ":lib_hash_crc32c_accelerate_internal",
