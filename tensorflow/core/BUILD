@@ -329,7 +329,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":lib_internal",
-    ],
+    ] + if_hdf5(["//third_party/hdf5",]),
 )
 
 # Test support library needed for all tests
