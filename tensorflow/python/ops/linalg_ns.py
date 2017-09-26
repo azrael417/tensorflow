@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Public API for tf.linalg namespace."""
+"""Public API for tf.linalg namespace.
+
+@@logdet
+"""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -22,6 +25,11 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import special_math_ops
+
+# go/tf-wildcard-import
+# pylint: disable=wildcard-import,unused-import
+from tensorflow.python.ops.linalg_impl import *
+# pylint: enable=wildcard-import
 
 # Linear algebra ops.
 band_part = array_ops.matrix_band_part
@@ -46,17 +54,13 @@ trace = math_ops.trace
 transpose = array_ops.matrix_transpose
 triangular_solve = linalg_ops.matrix_triangular_solve
 
-# Additional aliases for consistency with root namespace for ops whose names
-# changed significantly when moving to the linalg namespace.
-self_adjoint_eig = linalg_ops.self_adjoint_eig
-self_adjoint_eigvals = linalg_ops.self_adjoint_eigvals
-solve_ls = linalg_ops.matrix_solve_ls
-
 # Seal API.
 del absolute_import
 del array_ops
 del division
+del gen_linalg_ops
 del linalg_ops
 del math_ops
+del ops
 del print_function
 del special_math_ops

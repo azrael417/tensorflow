@@ -8,24 +8,6 @@ licenses(["notice"])  # Apache 2.0
 
 load("//tensorflow:tensorflow.bzl", "py_test")
 
-py_library(
-    name = "estimator_py",
-    srcs = ["estimator_lib.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":dnn",
-        ":dnn_linear_combined",
-        ":estimator",
-        ":export",
-        ":inputs",
-        ":linear",
-        ":model_fn",
-        ":parsing_utils",
-        ":run_config",
-        "//tensorflow/python:util",
-    ],
-)
-
 filegroup(
     name = "all_files",
     srcs = glob(
@@ -36,6 +18,77 @@ filegroup(
         ],
     ),
     visibility = ["//tensorflow:__subpackages__"],
+)
+
+py_library(
+    name = "estimator_py",
+    srcs = ["estimator_lib.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":dnn",
+        ":dnn_linear_combined",
+        ":estimator",
+        ":export",
+        ":export_strategy",
+        ":inputs",
+        ":linear",
+        ":model_fn",
+        ":parsing_utils",
+        ":run_config",
+        ":training",
+        "//tensorflow/python:util",
+    ],
+)
+
+py_library(
+    name = "export_strategy",
+    srcs = ["export_strategy.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":gc",
+        "//tensorflow/python:errors",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:util",
+    ],
+)
+
+py_test(
+    name = "export_strategy_test",
+    size = "small",
+    srcs = ["export_strategy_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":estimator",
+        ":export_strategy",
+        "//tensorflow/python:array_ops",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:util",
+    ],
+)
+
+py_library(
+    name = "gc",
+    srcs = ["gc.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        "//tensorflow/python:platform",
+        "//tensorflow/python:util",
+    ],
+)
+
+py_test(
+    name = "gc_test",
+    size = "small",
+    srcs = ["gc_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":gc",
+        "//tensorflow/python:client_testlib",
+        "//tensorflow/python:framework_test_lib",
+        "//tensorflow/python:platform",
+        "//tensorflow/python:util",
+    ],
 )
 
 py_library(
@@ -67,6 +120,28 @@ py_test(
         "//tensorflow/python:sparse_tensor",
         "//tensorflow/python:training",
         "//tensorflow/python/saved_model:signature_constants",
+    ],
+)
+
+py_library(
+    name = "training",
+    srcs = ["training.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":estimator",
+        "//tensorflow/python:training",
+        "@six_archive//:six",
+    ],
+)
+
+py_test(
+    name = "training_test",
+    size = "small",
+    srcs = ["training_test.py"],
+    srcs_version = "PY2AND3",
+    deps = [
+        ":training",
+        "//tensorflow/python:client_testlib",
     ],
 )
 
@@ -148,6 +223,7 @@ py_test(
     name = "dnn_test",
     size = "medium",
     srcs = ["canned/dnn_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
     tags = ["no_pip"],
     deps = [
@@ -201,7 +277,7 @@ py_test(
     name = "dnn_linear_combined_test",
     size = "medium",
     srcs = ["canned/dnn_linear_combined_test.py"],
-    shard_count = 4,
+    shard_count = 8,
     srcs_version = "PY2AND3",
     tags = ["no_pip"],
     deps = [
@@ -330,7 +406,6 @@ py_library(
 
 py_test(
     name = "parsing_utils_test",
-    size = "small",
     srcs = ["canned/parsing_utils_test.py"],
     srcs_version = "PY2AND3",
     deps = [
@@ -552,11 +627,9 @@ py_test(
     name = "linear_test",
     size = "medium",
     srcs = ["canned/linear_test.py"],
+    shard_count = 4,
     srcs_version = "PY2AND3",
-    tags = [
-        "no_pip",
-        "noasan",  # times out b/63680444
-    ],
+    tags = ["no_pip"],
     deps = [
         ":linear",
         ":linear_testing_utils",
