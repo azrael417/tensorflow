@@ -39,6 +39,11 @@ limitations under the License.
 #include "tensorflow/core/platform/protobuf.h"
 #include "tensorflow/core/platform/thread_annotations.h"
 
+#ifdef TENSORFLOW_USE_HDF5
+//hdf5-specific stuff
+#include "third_party/hdf5/hdf5.h"
+#endif
+
 namespace tensorflow {
 
 namespace {
@@ -649,6 +654,19 @@ Status GcsFileSystem::NewRandomAccessFile(
   result->reset(new GcsRandomAccessFile(fname, file_block_cache_.get()));
   return Status::OK();
 }
+
+#ifdef TENSORFLOW_USE_HDF5
+Status GcsFileSystem::NewHDF5File(
+    const string& fname, std::unique_ptr<HDF5File>* result) {
+  string bucket, object;
+  TF_RETURN_IF_ERROR(ParseGcsPath(fname, false, &bucket, &object));
+  //create file access property list
+  hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+  //get HDF5 file:
+  result->reset(new HDF5File(fname, fapl_id));
+  return Status::OK();
+}
+#endif
 
 // A helper function to build a FileBlockCache for GcsFileSystem.
 std::unique_ptr<FileBlockCache> GcsFileSystem::MakeFileBlockCache(

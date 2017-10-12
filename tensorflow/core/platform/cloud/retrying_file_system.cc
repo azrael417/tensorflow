@@ -118,6 +118,20 @@ Status RetryingFileSystem::NewRandomAccessFile(
   return Status::OK();
 }
 
+#ifdef TENSORFLOW_USE_HDF5
+Status RetryingFileSystem::NewHDF5File(
+    const string& filename, std::unique_ptr<HDF5File>* result) {
+  std::unique_ptr<HDF5File> base_file;
+  TF_RETURN_IF_ERROR(RetryingUtils::CallWithRetries(
+      std::bind(&FileSystem::NewHDF5File, base_file_system_.get(),
+                filename, &base_file),
+      initial_delay_microseconds_));
+  result->reset(new RetryingHDF5File(std::move(base_file),
+                                             initial_delay_microseconds_));
+  return Status::OK();
+}
+#endif
+
 Status RetryingFileSystem::NewWritableFile(
     const string& filename, std::unique_ptr<WritableFile>* result) {
   std::unique_ptr<WritableFile> base_file;

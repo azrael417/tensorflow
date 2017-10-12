@@ -309,9 +309,10 @@ class _SqlDataset(dataset_ops.Dataset):
     return self._output_types
 
 
-class HDF5Dataset(Dataset):
+class HDF5Dataset(dataset_ops.Dataset):
   """A `Dataset` comprising records from one or more HDF5 files."""
 
+  @deprecation.deprecated(None, "Use `tf.data.TFHDF5Dataset`.")
   def __init__(self, filenames, datasets):
     """Creates an `HDF5Dataset`.
     Args:

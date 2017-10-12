@@ -181,7 +181,7 @@ class HDF5Dataset(Dataset):
     self._filenames = ops.convert_to_tensor(filenames, name="filenames")
     self._datasets = ops.convert_to_tensor(datasets, name="datasets")
 
-  def make_dataset_resource(self):
+  def _as_variant_tensor(self):
     return gen_dataset_ops.hdf5_dataset(self._filenames, self._datasets)
 
   @property
