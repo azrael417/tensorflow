@@ -1418,7 +1418,7 @@ cc_library(
                   "SNAPPY",
               ] + tf_additional_verbs_lib_defines() +
               tf_additional_mpi_lib_defines() +
-	      tf_additional_hdf5_lib_defines() +
+              tf_additional_hdf5_lib_defines() +
               tf_additional_gdr_lib_defines(),
     linkopts = select({
         "//tensorflow:freebsd": [],

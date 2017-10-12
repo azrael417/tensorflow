@@ -46,6 +46,26 @@ class RetryingRandomAccessFile : public RandomAccessFile {
   const int64 initial_delay_microseconds_;
 };
 
+
+#ifdef TENSORFLOW_USE_HDF5
+class RetryingHDF5File : public HDF5File {
+ public:
+  RetryingHDF5File(std::unique_ptr<HDF5File> base_file, int64 delay_microseconds)
+      : base_file_(std::move(base_file)), initial_delay_microseconds_(delay_microseconds) {}
+
+  Status Read(const string& dset, const size_t& row_num, string* result) const {
+    return RetryingUtils::CallWithRetries(
+        std::bind(&HDF5File::Read, base_file_.get(), dset, row_num, result),
+        initial_delay_microseconds_);
+  }
+
+ private:
+  std::unique_ptr<HDF5File> base_file_;
+  const int64 initial_delay_microseconds_;
+};
+#endif
+
+
 class RetryingWritableFile : public WritableFile {
  public:
   RetryingWritableFile(std::unique_ptr<WritableFile> base_file,
