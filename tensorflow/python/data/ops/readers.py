@@ -166,3 +166,28 @@ class FixedLengthRecordDataset(Dataset):
   @property
   def output_types(self):
     return dtypes.string
+
+
+class HDF5Dataset(Dataset):
+  """A `Dataset` comprising records from one or more HDF5 files."""
+
+  def __init__(self, filenames, datasets):
+    """Creates an `HDF5Dataset`.
+    Args:
+      filenames: A `tf.string` tensor containing one or more filenames.
+      datasets: A `tf.string` tensor containing one or more datasets.
+    """
+    super(HDF5Dataset, self).__init__()
+    self._filenames = ops.convert_to_tensor(filenames, name="filenames")
+    self._datasets = ops.convert_to_tensor(datasets, name="datasets")
+
+  def make_dataset_resource(self):
+    return gen_dataset_ops.hdf5_dataset(self._filenames, self._datasets)
+
+  @property
+  def output_shapes(self):
+    return tensor_shape.TensorShape([])
+
+  @property
+  def output_types(self):
+    return dtypes.string

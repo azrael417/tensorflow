@@ -885,6 +885,10 @@ tf_module {
     argspec: "args=[\'records\', \'record_defaults\', \'field_delim\', \'use_quote_delim\', \'name\', \'na_value\'], varargs=None, keywords=None, defaults=[\',\', \'True\', \'None\', \'\'], "
   }
   member_method {
+    name: "decode_hdf5"
+    argspec: "args=[\'records\'], varargs=None, keywords=None, defaults=[\',\'], "
+  }
+  member_method {
     name: "decode_json_example"
     argspec: "args=[\'json_examples\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }

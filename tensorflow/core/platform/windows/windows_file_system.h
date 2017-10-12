@@ -34,6 +34,13 @@ class WindowsFileSystem : public FileSystem {
   Status NewRandomAccessFile(
       const string& fname, std::unique_ptr<RandomAccessFile>* result) override;
 
+#ifdef TENSORFLOW_USE_HDF5
+  Status NewHDF5File(
+      const string& fname, std::unique_ptr<HDF5File>* result) override{
+        return errors::Unimplemented("NewHDF5File unimplemented for Windows File System");
+      }
+#endif
+
   Status NewWritableFile(const string& fname,
                          std::unique_ptr<WritableFile>* result) override;
 

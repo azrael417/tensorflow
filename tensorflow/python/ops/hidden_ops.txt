@@ -208,6 +208,7 @@ TextLineReaderV2
 TFRecordReaderV2
 WholeFileReaderV2
 LMDBReader
+HDF5Reader
 DecodeCSV
 
 # linalg_ops

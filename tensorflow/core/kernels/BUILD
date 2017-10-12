@@ -51,6 +51,10 @@ load(
     "if_mkl",
 )
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+load(
+    "//third_party/hdf5:hdf5.bzl",
+    "if_hdf5",
+)
 
 config_setting(
     # Add "--define tensorflow_xsmm=1" to your build command to use libxsmm for
@@ -2107,7 +2111,7 @@ cc_library(
         ":text_line_reader_op",
         ":tf_record_reader_op",
         ":whole_file_read_ops",
-    ],
+    ] + if_hdf5([":hdf5_reader_op"]),
 )
 
 IO_DEPS = [
@@ -2139,6 +2143,14 @@ tf_kernel_library(
     deps = IO_DEPS + [
         "@lmdb",
     ],
+)
+
+tf_kernel_library(
+    name = "hdf5_reader_op",
+    prefix = "hdf5_reader_op",
+    deps = IO_DEPS + [
+          "//third_party/hdf5",
+          ],
 )
 
 tf_kernel_library(
@@ -3342,11 +3354,12 @@ cc_library(
     name = "parsing",
     deps = [
         ":decode_csv_op",
-        ":decode_raw_op",
-        ":example_parsing_ops",
+        ":decode_raw_op",]
+        + if_hdf5([":decode_hdf5_op"])
+        + [":example_parsing_ops",
         ":parse_tensor_op",
         ":string_to_number_op",
-    ],
+        ],
 )
 
 PARSING_DEPS = [
@@ -3367,6 +3380,14 @@ tf_kernel_library(
     name = "decode_raw_op",
     prefix = "decode_raw_op",
     deps = PARSING_DEPS,
+)
+
+tf_kernel_library(
+    name = "decode_hdf5_op",
+    prefix = "decode_hdf5_op",
+    deps = PARSING_DEPS + [
+          "//third_party/hdf5",
+          ],
 )
 
 tf_kernel_library(

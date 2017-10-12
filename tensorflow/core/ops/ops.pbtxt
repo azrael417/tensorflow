@@ -6289,6 +6289,30 @@ op {
   description: "RFC 4180 format is expected for the CSV records.\n(https://tools.ietf.org/html/rfc4180)\nNote that we allow leading and trailing spaces with int or float field."
 }
 op {
+  name: "DecodeHDF5"
+  input_arg {
+    name: "records"
+    description: "Each string is a series of HDF5 records which will be expanded in to arrays."
+    type: DT_STRING
+  }
+  output_arg {
+    name: "output"
+    description: "Each tensor will have the same shape as records."
+    type_list_attr: "OUT_TYPE"
+  }
+  attr {
+    name: "OUT_TYPE"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+    allowed_values {
+      list {
+        type: DT_FLOAT
+      }
+    }
+  }
+}
+op {
   name: "DecodeGif"
   input_arg {
     name: "contents"

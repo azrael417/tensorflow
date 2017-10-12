@@ -32,6 +32,7 @@ limitations under the License.
 #include "tensorflow/core/platform/posix/error.h"
 #include "tensorflow/core/platform/posix/posix_file_system.h"
 
+
 namespace tensorflow {
 
 // pread() based random-access
@@ -144,6 +145,24 @@ Status PosixFileSystem::NewRandomAccessFile(
   }
   return s;
 }
+
+#ifdef TENSORFLOW_USE_HDF5
+Status PosixFileSystem::NewHDF5File(
+    const string& fname, std::unique_ptr<HDF5File>* result) {
+  string translated_fname = TranslateName(fname);
+  Status s;
+  int fd = open(translated_fname.c_str(), O_RDONLY);
+  if (fd < 0) {
+    s = IOError(fname, errno);
+  } else {
+    //better close and let the engine under the hood manage that
+    close(fd);
+    hid_t fapl_id = H5Pcreate(H5P_FILE_ACCESS);
+    result->reset(new HDF5File(translated_fname, fapl_id));
+  }
+  return s;
+}
+#endif
 
 Status PosixFileSystem::NewWritableFile(const string& fname,
                                         std::unique_ptr<WritableFile>* result) {

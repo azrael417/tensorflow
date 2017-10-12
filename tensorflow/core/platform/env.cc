@@ -111,6 +111,15 @@ Status Env::NewRandomAccessFile(const string& fname,
   return fs->NewRandomAccessFile(fname, result);
 }
 
+#ifdef TENSORFLOW_USE_HDF5
+Status Env::NewHDF5File(const string& fname,
+                        std::unique_ptr<HDF5File>* result) {
+  FileSystem* fs;
+  TF_RETURN_IF_ERROR(GetFileSystemForFile(fname, &fs));
+  return fs->NewHDF5File(fname, result);
+}
+#endif
+
 Status Env::NewReadOnlyMemoryRegionFromFile(
     const string& fname, std::unique_ptr<ReadOnlyMemoryRegion>* result) {
   FileSystem* fs;

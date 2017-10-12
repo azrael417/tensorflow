@@ -307,3 +307,16 @@ class _SqlDataset(dataset_ops.Dataset):
   @property
   def output_types(self):
     return self._output_types
+
+
+class HDF5Dataset(Dataset):
+  """A `Dataset` comprising records from one or more HDF5 files."""
+
+  def __init__(self, filenames, datasets):
+    """Creates an `HDF5Dataset`.
+    Args:
+      filenames: A `tf.string` tensor containing one or more filenames.
+      datasets: A `tf.string` tensor containing one or more datasets.
+    """
+    dset = readers.HDF5Dataset(filenames, datasets)
+    super(HDF5Dataset, self).__init__(dset)

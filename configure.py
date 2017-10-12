@@ -893,8 +893,8 @@ def set_mpi_home(environ_cp):
     mpi_home = get_from_env_or_user_or_default(environ_cp, 'MPI_HOME',
                                                ask_mpi_home, default_mpi_home)
 
-    if os.path.exists(os.path.join(mpi_home, 'include')) and os.path.exists(
-        os.path.join(mpi_home, 'lib')):
+    if os.path.exists(os.path.join(mpi_home, 'include')) and os.path.exists(os.path.join(mpi_home, 'lib')):
+      print('Found MPI toolkit in {}'.format(mpi_home))
       break
 
     print('Invalid path to the MPI Toolkit. %s or %s cannot be found' %
@@ -910,7 +910,10 @@ def set_other_mpi_vars(environ_cp):
   """Set other MPI related variables."""
   # Link the MPI header files
   mpi_home = environ_cp.get('MPI_HOME')
-  symlink_force('%s/include/mpi.h' % mpi_home, 'third_party/mpi/mpi.h')
+  
+  for filename in os.listdir('%s/include' % mpi_home):
+    if(filename.endswith(".h")):
+      symlink_force('{}/include/{}'.format(mpi_home,filename), 'third_party/mpi/{}'.format(filename))
 
   # Determine if we use OpenMPI or MVAPICH, these require different header files
   # to be included here to make bazel dependency checker happy
@@ -934,9 +937,51 @@ def set_other_mpi_vars(environ_cp):
   if os.path.exists(os.path.join(mpi_home, 'lib/libmpi.so')):
     symlink_force(
         os.path.join(mpi_home, 'lib/libmpi.so'), 'third_party/mpi/libmpi.so')
+  elif os.path.exists(os.path.join(mpi_home, 'lib/libmpich.so')):
+    symlink_force(
+        os.path.join(mpi_home, 'lib/libmpich.so'), 'third_party/mpi/libmpich.so')
   else:
     raise ValueError('Cannot find the MPI library file in %s/lib' % mpi_home)
 
+
+def set_hdf5_home(environ_cp):
+  """Set HDF5_HOME."""
+  cmd = ['dirname','$(dirname $(which h5cc))', '||', 'dirname', '$(dirname $(which h5c++))']
+  default_hdf5_home = run_shell(cmd)
+  ask_hdf5_home = ('Please specify the HDF5 folder. [Default is %s]: '
+                 ) % default_hdf5_home
+  while True:
+    hdf5_home = get_from_env_or_user_or_default(environ_cp, 'HDF5_DIR',
+                                               ask_hdf5_home, default_hdf5_home)
+
+    if os.path.exists(os.path.join(hdf5_home, 'include')) and os.path.exists(
+        os.path.join(hdf5_home, 'lib')):
+      break
+
+    print('Invalid path to the HDF5 folder. %s or %s cannot be found' %
+          (os.path.join(hdf5_home, 'include'),
+           os.path.exists(os.path.join(hdf5_home, 'lib'))))
+    environ_cp['HDF5_DIR'] = ''
+
+  # Set MPI_HOME
+  environ_cp['HDF5_DIR'] = str(hdf5_home)
+
+
+def set_other_hdf5_vars(environ_cp):
+  """Set other HDF5 related variables."""
+  # Link the HDF5 header files
+  hdf5_home = environ_cp.get('HDF5_DIR')
+  
+  #link all headers into the hdf5 dir
+  for filename in os.listdir('%s/include' % hdf5_home):
+    if(filename.endswith(".h")):
+      symlink_force('{}/include/{}'.format(hdf5_home,filename), 'third_party/hdf5/{}'.format(filename))
+
+  #link all libs into the hdf5 dir
+  for filename in os.listdir('%s/lib' % hdf5_home):
+    if(filename.endswith(".so") or filename.endswith(".a")):
+      symlink_force('{}/lib/{}'.format(hdf5_home,filename), 'third_party/hdf5/{}'.format(filename))
+	
 
 def set_mkl():
   write_to_bazelrc('build:mkl --define using_mkl=true')
@@ -982,6 +1027,7 @@ def main():
     environ_cp['TF_NEED_JEMALLOC'] = '0'
     environ_cp['TF_NEED_OPENCL'] = '0'
     environ_cp['TF_CUDA_CLANG'] = '0'
+    environ_cp['TF_NEED_HDF5'] = '0'
 
   if is_macos():
     environ_cp['TF_NEED_JEMALLOC'] = '0'
@@ -1029,6 +1075,11 @@ def main():
   if environ_cp.get('TF_NEED_MPI') == '1':
     set_mpi_home(environ_cp)
     set_other_mpi_vars(environ_cp)
+	
+  set_build_var(environ_cp, 'TF_NEED_HDF5', 'HDF5', 'with_hdf5_support', False)
+  if environ_cp.get('TF_NEED_HDF5') == '1':
+    set_hdf5_home(environ_cp)
+    set_other_hdf5_vars(environ_cp)
 
   set_cc_opt_flags(environ_cp)
   set_mkl()

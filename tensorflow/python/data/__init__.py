@@ -19,6 +19,7 @@ See the @{$datasets$Importing Data} Programmer's Guide for an overview.
 @@Dataset
 @@Iterator
 @@TFRecordDataset
+@@HDF5Dataset
 @@FixedLengthRecordDataset
 @@TextLineDataset
 """
@@ -33,6 +34,7 @@ from tensorflow.python.data.ops.iterator_ops import Iterator
 from tensorflow.python.data.ops.readers import FixedLengthRecordDataset
 from tensorflow.python.data.ops.readers import TextLineDataset
 from tensorflow.python.data.ops.readers import TFRecordDataset
+from tensorflow.python.data.ops.dataset_ops import HDF5Dataset
 # pylint: enable=unused-import
 
 from tensorflow.python.util.all_util import remove_undocumented

@@ -366,6 +366,22 @@ use_quote_delim: If false, treats double quotation marks as regular
 na_value: Additional string to recognize as NA/NaN.
 output: Each tensor will have the same shape as records.
 )doc");
+  
+REGISTER_OP("DecodeHDF5")
+    .Input("records: string")
+    .Output("output: OUT_TYPE")
+    .Attr("OUT_TYPE: list({float, double, int32, int64})")
+    .SetShapeFn([](InferenceContext* c) {
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Convert HDF5 records to tensors. Each String element maps to one Tensor.
+Currently, all elements must be of numeric type and the resulting tensor objects will
+be comprised of either float32, float64, int32 or int64 numbers. 
+
+records: Each string is an HDF5 record.
+output: List of tensors, where each tensor will have the shape as specified by the records.
+)doc");
 
 REGISTER_OP("StringToNumber")
     .Input("string_tensor: string")

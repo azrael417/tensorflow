@@ -21,6 +21,7 @@ See the @{$datasets$Importing Data} Programmer's Guide for an overview.
 @@TFRecordDataset
 @@FixedLengthRecordDataset
 @@TextLineDataset
+@@HDF5Dataset
 
 @@batch_and_drop_remainder
 @@dense_to_sparse_batch
@@ -52,6 +53,7 @@ from tensorflow.contrib.data.python.ops.readers import read_batch_features
 from tensorflow.contrib.data.python.ops.readers import SqlDataset
 from tensorflow.contrib.data.python.ops.readers import TextLineDataset
 from tensorflow.contrib.data.python.ops.readers import TFRecordDataset
+from tensorflow.contrib.data.python.ops.readers import HDF5Dataset
 from tensorflow.contrib.data.python.ops.resampling import rejection_resample
 from tensorflow.contrib.data.python.ops.sloppy_ops import sloppy_interleave
 from tensorflow.python.data.ops.iterator_ops import Iterator

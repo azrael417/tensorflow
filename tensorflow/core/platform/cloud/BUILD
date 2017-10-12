@@ -12,6 +12,18 @@ load(
     "tf_cc_test",
 )
 
+#for HDF5
+load(
+    "//tensorflow/core:platform/default/build_config.bzl",
+    "tf_additional_hdf5_lib_defines",
+)
+
+load(
+    "//third_party/hdf5:hdf5.bzl",
+    "if_hdf5",
+)
+
+
 filegroup(
     name = "all_files",
     srcs = glob(
@@ -47,6 +59,7 @@ cc_library(
     hdrs = [
         "gcs_file_system.h",
     ],
+    defines = tf_additional_hdf5_lib_defines(),
     linkstatic = 1,  # Needed since alwayslink is broken in bazel b/27630669
     visibility = ["//visibility:public"],
     deps = [
@@ -61,7 +74,7 @@ cc_library(
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core:lib_internal",
         "@jsoncpp_git//:jsoncpp",
-    ],
+    ] + if_hdf5(["//third_party/hdf5",]),
     alwayslink = 1,
 )
 
@@ -176,11 +189,12 @@ cc_library(
     hdrs = [
         "retrying_file_system.h",
     ],
+    defines = tf_additional_hdf5_lib_defines(),
     deps = [
         ":retrying_utils",
         "//tensorflow/core:framework_headers_lib",
         "//tensorflow/core:lib_internal",
-    ],
+    ] + if_hdf5(["//third_party/hdf5",]),
 )
 
 cc_library(

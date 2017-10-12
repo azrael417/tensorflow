@@ -547,6 +547,24 @@ buffer_size: A scalar representing the number of bytes to buffer. A value of
   0 means no buffering will be performed.
 )doc");
 
+#ifdef TENSORFLOW_USE_HDF5
+REGISTER_OP("HDF5Dataset")
+    .Input("filenames: string")
+    .Input("datasets: string")
+    .Output("handle: variant")
+    .SetIsStateful()
+    .SetShapeFn(shape_inference::ScalarShape)
+    .Doc(R"doc(
+Creates a dataset that emits the records from one or more HDF5 files.
+
+To use, enqueue strings in a Queue.  ReaderRead will take the front
+work string and output (work, work).
+
+filenames: A scalar or vector containing the name(s) of the file(s) to be read.
+datasets: A scalar or vector containing the name(s) of the datasets(s) to be read from each file. The full paths to datasets have to be specified.
+)doc");
+#endif
+
 REGISTER_OP("Iterator")
     .Output("handle: resource")
     .Attr("shared_name: string")

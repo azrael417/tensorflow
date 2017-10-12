@@ -514,6 +514,12 @@ def tf_additional_mpi_lib_defines():
       "//conditions:default": [],
   })
 
+def tf_additional_hdf5_lib_defines():
+  return select({
+      "//tensorflow:with_hdf5_support": ["TENSORFLOW_USE_HDF5"],
+      "//conditions:default": [],
+  })
+
 def tf_additional_gdr_lib_defines():
   return select({
       "//tensorflow:with_gdr_support": ["TENSORFLOW_USE_GDR"],

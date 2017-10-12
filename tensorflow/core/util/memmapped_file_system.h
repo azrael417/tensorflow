@@ -74,6 +74,10 @@ class MemmappedFileSystem : public FileSystem {
   Status NewRandomAccessFile(
       const string& filename,
       std::unique_ptr<RandomAccessFile>* result) override;
+#ifdef TENSORFLOW_USE_HDF5
+  Status NewHDF5File(
+      const string& filename, std::unique_ptr<HDF5File>* result) override;
+#endif
   Status NewReadOnlyMemoryRegionFromFile(
       const string& filename,
       std::unique_ptr<ReadOnlyMemoryRegion>* result) override;

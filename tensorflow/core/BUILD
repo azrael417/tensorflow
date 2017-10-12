@@ -126,6 +126,7 @@ load(
     "tf_lib_proto_parsing_deps",
     "tf_additional_verbs_lib_defines",
     "tf_additional_mpi_lib_defines",
+    "tf_additional_hdf5_lib_defines",
     "tf_additional_gdr_lib_defines",
     "tf_additional_gpu_tracer_srcs",
     "tf_additional_gpu_tracer_deps",
@@ -144,6 +145,12 @@ load(
 load(
     "//third_party/mkl:build_defs.bzl",
     "if_mkl",
+)
+
+#for HDF5
+load(
+    "//third_party/hdf5:hdf5.bzl",
+    "if_hdf5",
 )
 
 # -----------------------------------------------------------------------------
@@ -305,6 +312,7 @@ cc_library(
         "lib/io/proto_encode_helper.h",
         "lib/io/random_inputstream.h",
         "lib/io/record_reader.h",
+        "lib/io/hdf5_reader.h",
         "lib/io/record_writer.h",
         "lib/io/table.h",
         "lib/io/table_builder.h",
@@ -349,7 +357,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":lib_internal",
-    ],
+    ] + if_hdf5(["//third_party/hdf5",]),
 )
 
 # Test support library needed for all tests
@@ -1410,6 +1418,7 @@ cc_library(
                   "SNAPPY",
               ] + tf_additional_verbs_lib_defines() +
               tf_additional_mpi_lib_defines() +
+              tf_additional_hdf5_lib_defines() +
               tf_additional_gdr_lib_defines(),
     linkopts = select({
         "//tensorflow:freebsd": [],
@@ -1423,7 +1432,7 @@ cc_library(
     deps = tf_additional_lib_deps() + [
         "//third_party/eigen3",
         "//tensorflow/core/platform/default/build_config:platformlib",
-    ] + if_static([":lib_internal_impl"]),
+    ] + if_static([":lib_internal_impl"]) + if_hdf5(["//third_party/hdf5",]),
 )
 
 cc_library(
@@ -1460,10 +1469,12 @@ cc_library(
         ] +
         # Protobuf deps already included through the ":lib_proto_parsing"
         # dependency.
-        tf_additional_proto_srcs(),
+        tf_additional_proto_srcs()
+        ,
     ),
     hdrs = LIB_INTERNAL_PUBLIC_HEADERS,
     copts = tf_copts(),
+    defines = tf_additional_hdf5_lib_defines(),
     deps = tf_additional_lib_deps() + [
         ":lib_hash_crc32c_accelerate_internal",
         ":lib_proto_parsing",
@@ -1472,7 +1483,8 @@ cc_library(
         "@snappy",
         "@zlib_archive//:zlib",
         "@protobuf_archive//:protobuf",
-    ] + tf_protos_all_impl(),
+    ] + tf_protos_all_impl() 
+    + if_hdf5(["//third_party/hdf5",]),
 )
 
 # File compiled with extra flags to get cpu-specific acceleration.

@@ -74,7 +74,7 @@ class Env {
 
   /// \brief Creates a brand new random access read-only file with the
   /// specified name.
-
+  ///
   /// On success, stores a pointer to the new file in
   /// *result and returns OK.  On failure stores NULL in *result and
   /// returns non-OK.  If the file does not exist, returns a non-OK
@@ -87,6 +87,24 @@ class Env {
   /// shouldn't live longer than the Env object.
   Status NewRandomAccessFile(const string& fname,
                              std::unique_ptr<RandomAccessFile>* result);
+                             
+#ifdef TENSORFLOW_USE_HDF5
+  /// \brief Creates a brand new HDF5 read-only file with the
+  /// specified name.
+  ///
+  /// On success, stores a FileSystem-dependent access control list 
+  /// and the filename to the new file in *result and returns OK.
+  /// On failure stores NULL in *result and returns non-OK.
+  /// If the file does not exist, returns a non-OK status.
+  ///
+  /// The returned file may be concurrently accessed by multiple threads.
+  ///
+  /// The ownership of the returned HDF5File is passed to the caller
+  /// and the object should be deleted when is not used. The file object
+  /// shouldn't live longer than the Env object.
+  Status NewHDF5File(const string& fname,
+                     std::unique_ptr<HDF5File>* result);
+#endif
 
   /// \brief Creates an object that writes to a new file with the specified
   /// name.

@@ -29,6 +29,11 @@ limitations under the License.
 #include "tensorflow/core/platform/platform.h"
 #include "tensorflow/core/platform/protobuf.h"
 
+//DEBUG
+#include <chrono>
+//DEBUG
+
+
 namespace tensorflow {
 
 namespace {
@@ -261,5 +266,230 @@ Status FileSystem::RecursivelyCreateDir(const string& dirname) {
   }
   return Status::OK();
 }
+
+
+#ifdef TENSORFLOW_USE_HDF5
+// HDF5 specific stuff
+Status HDF5File::hdf5_check_file_exists(const string& fname) const {
+  Status s;
+  
+  hid_t hdf5_status = H5Fis_hdf5(fname.c_str());
+  if(hdf5_status < 0) s = Status(error::NOT_FOUND, strings::StrCat("file does not exist; ", static_cast<int>(hdf5_status)));
+  else if(hdf5_status == 0) s = Status(error::INVALID_ARGUMENT,"file is not an hdf5-file");
+  else s = Status::OK();
+  
+  return s;
+}  
+
+
+Status HDF5File::hdf5_check_dataset_exists(const string& dname) const{
+  Status s;
+  
+  //check if object exists and has right type
+  hid_t hdf5_status = H5Oexists_by_name( hdf5_fd_, dname.c_str(), H5P_DEFAULT );
+  if(hdf5_status<=0){
+    s = Status(error::NOT_FOUND, strings::StrCat("object "+dname+" does not exist; ", static_cast<int>(hdf5_status)));
+  }
+  else{
+    H5O_info_t object_info;
+    H5Oget_info_by_name( hdf5_fd_, dname.c_str(), &object_info, H5P_DEFAULT );
+    if(object_info.type!=H5O_TYPE_DATASET){
+      s = Status(error::INVALID_ARGUMENT, strings::StrCat("dataset: "+dname+" not a dataset; ", static_cast<int>(object_info.type)));
+    }
+    else{
+      s = Status::OK();
+    }
+  }
+  return s;
+}
+
+
+//encodes the record the following way: 
+//buff = type_buff_size|type_buff(buff_size)|num_dims|dims(num_dims)|data(prod_i dims(i))
+// all size types are hsize_t.
+string HDF5File::EncodeBinary(const DatasetInfo* info) const{
+  //datatype size of buffer
+  hsize_t tsize = static_cast<hsize_t>(info->type_enc.size());
+  StringPiece ntype_piece = StringPiece( reinterpret_cast<const char*>(&tsize), sizeof(tsize) );
+  //datatype
+  StringPiece type_piece = StringPiece( info->type_enc.c_str(), tsize );
+  //number of dimensions 
+  StringPiece ndims_piece = StringPiece( reinterpret_cast<const char*>(&info->ndims), sizeof(info->ndims) );
+  //mode sizes
+  StringPiece dims_piece = StringPiece( reinterpret_cast<const char*>(&info->dims[1]), (info->ndims)*sizeof(hsize_t) );
+  //data
+  StringPiece data_piece = StringPiece( info->buff, (info->type_size)*(info->dset_size) );
+    
+  //concatenate everything
+  return strings::StrCat( ntype_piece, type_piece, ndims_piece, dims_piece, data_piece );
+}
+
+
+HDF5File::HDF5File(const string& fname, const hid_t& fapl_id) : filename_(fname), fapl_id_(fapl_id) {
+  //default property list for data access
+  dapl_id_ = H5Pcreate(H5P_DATASET_XFER);
+  
+  //do some checks:
+  Status s = hdf5_check_file_exists(fname);
+  if( s == Status::OK() ){
+    hdf5_fd_ = H5Fopen(fname.c_str(), H5F_ACC_RDONLY, fapl_id_);
+  }
+}
+  
+  
+HDF5File::~HDF5File() { 
+  //close the objects I still have a handle on:
+  std::map<string, DatasetInfo>::iterator it;
+  for(it=dsetinfo.begin(); it!=dsetinfo.end(); ++it){
+    //free buffers
+    delete [] it->second.buff;
+    //close type
+    H5Tclose(it->second.type);
+    //close dataset
+    H5Dclose(it->second.id);
+  }
+  
+  //clear the map
+  dsetinfo.clear();
+  
+  //close everything which remains open
+  unsigned int types = H5F_OBJ_DATASET | H5F_OBJ_GROUP | H5F_OBJ_DATATYPE | H5F_OBJ_ATTR;
+
+  //get number of objects still open:
+  ssize_t num_open = H5Fget_obj_count(hdf5_fd_, types);
+  if (num_open > 0) { 
+    std::vector<hid_t> open_object_ids(num_open, 0); 
+    H5Fget_obj_ids(hdf5_fd_, types, num_open, &(open_object_ids.front()) ); 
+    for(unsigned int i=0; i<num_open; ++i){
+      H5Oclose(open_object_ids[i]);
+    }
+  }
+  
+  //close porperty lists
+  H5Pclose(dapl_id_);
+  H5Pclose(fapl_id_);
+  
+  //close the file finally
+  H5Fclose(hdf5_fd_);
+}
+
+
+Status HDF5File::InitDataset(const string& dset){
+  Status s;
+    
+  //first, check if dataset exists:
+  s = hdf5_check_dataset_exists(dset);
+  if(s != Status::OK()) return s;
+    
+  //create temporary object
+  DatasetInfo info;
+    
+  //open dataset
+  info.id = H5Dopen(hdf5_fd_, dset.c_str(), H5P_DEFAULT);
+    
+  //get space:
+  hid_t mem_id = H5Dget_space( info.id );
+    
+  //determine dimensionality of dataset:
+  int ndims = H5Sget_simple_extent_ndims( mem_id );
+  info.dims.resize(ndims);
+  H5Sget_simple_extent_dims(mem_id, info.dims.data(), NULL);
+  
+  //if vector is provided, attach singleton dimension.
+  if(ndims==1) info.dims.push_back(1);
+  //in here we store the number of dims - 1 (first dim is batched) for the string piece:
+  info.ndims = info.dims.size()-1;
+  
+  //get datatype, only numeric types supported so far:
+  info.type = H5Tget_native_type(H5Dget_type(info.id), H5T_DIR_DESCEND);
+  //encode the type into a string which will be prepended to the output
+  size_t tencsize = 0;
+  H5Tencode(info.type, NULL, &tencsize);
+  unsigned char* tmpstr = new unsigned char[tencsize];
+  H5Tencode(info.type, tmpstr, &tencsize);
+  info.type_enc = string(reinterpret_cast<char*>(tmpstr), tencsize);
+  delete [] tmpstr;
+  
+  //determine size and allocate buffers
+  hsize_t buff_size = 1;
+  for(unsigned int d=1; d<info.dims.size(); d++) buff_size *= info.dims[d];
+  info.dset_size = buff_size;
+  info.type_size = H5Tget_size(info.type);
+  
+  //allocate buffers
+  info.buff = new char[info.dset_size*info.type_size];
+  
+  //add to hashmap
+  dsetinfo[dset] = info;
+  
+  //close objects:
+  H5Sclose(mem_id);
+  
+  return s;
+}
+
+
+Status HDF5File::Read(const string& dset, const size_t& row_num, string* result) const {
+  Status s;
+    
+  //if dataset not initialized, do it now:
+  if(dsetinfo.find( dset ) == dsetinfo.end()){
+    s = Status(error::FAILED_PRECONDITION,"you need to initialize a dataset first using the InitDataset(<name>) member function before reading from it");
+    return s;
+  }
+  if(s != Status::OK()) return s;
+  
+  //get size needed for buffer
+  const DatasetInfo* info = &(dsetinfo.at(dset));
+    
+  //check if we are already wrapping around:
+  if(row_num>=info->dims[0]) return Status(error::OUT_OF_RANGE,"row number specified bigger than the 0-dimension of the dataset");
+
+  //set hyperslab parameters
+  std::vector<hsize_t> start(info->dims.size()), count(info->dims.size());
+  //read one row only
+  start[0] = static_cast<hsize_t>(row_num);
+  count[0] = 1;
+  //read the full thing for the rest
+  for(unsigned int d=1; d<info->dims.size(); ++d){
+    start[d] = 0;
+    count[d] = info->dims[d];
+  }
+    
+  //no checks here as those were already performed before
+  hid_t file_space = H5Dget_space(info->id);
+  H5Sselect_hyperslab(file_space, H5S_SELECT_SET, start.data(), NULL, count.data(), NULL);
+  hid_t mem_space = H5Screate_simple(static_cast<hsize_t>(info->ndims), &(info->dims[1]), NULL);
+
+  //read from the slab
+  if( H5Tequal(info->type, H5T_NATIVE_FLOAT) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<float*>(info->buff));
+  }
+  else if( H5Tequal(info->type, H5T_NATIVE_INT) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<int*>(info->buff));
+  }
+  else if( H5Tequal(info->type, H5T_NATIVE_LONG) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<long*>(info->buff));
+  }
+  else if( H5Tequal(info->type, H5T_NATIVE_DOUBLE) ){
+    H5Dread(info->id, info->type, mem_space, file_space, dapl_id_, reinterpret_cast<double*>(info->buff));
+  }
+  else{
+    s = Status(error::INVALID_ARGUMENT," error, datatype currently not supported.");
+  }
+
+  //close the spaces:
+  H5Sclose(file_space);
+  H5Sclose(mem_space);
+
+  //encode binary
+  *result = EncodeBinary(info);
+  
+  //status is OK
+  s = Status::OK();
+  return s;
+}
+#endif
+
 
 }  // namespace tensorflow

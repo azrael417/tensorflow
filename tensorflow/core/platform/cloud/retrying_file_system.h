@@ -21,6 +21,11 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/file_system.h"
 
+#ifdef TENSORFLOW_USE_HDF5
+//hdf5-specific stuff
+#include "third_party/hdf5/hdf5.h"
+#endif
+
 namespace tensorflow {
 
 /// A wrapper to add retry logic to another file system.
@@ -34,6 +39,11 @@ class RetryingFileSystem : public FileSystem {
   Status NewRandomAccessFile(
       const string& filename,
       std::unique_ptr<RandomAccessFile>* result) override;
+
+#ifdef TENSORFLOW_USE_HDF5
+  Status NewHDF5File(
+      const string& fname, std::unique_ptr<HDF5File>* result) override;
+#endif
 
   Status NewWritableFile(const string& fname,
                          std::unique_ptr<WritableFile>* result) override;
