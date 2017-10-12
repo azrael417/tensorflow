@@ -50,7 +50,10 @@ py_test(
     size = "small",
     srcs = ["python/estimator/dnn_test.py"],
     srcs_version = "PY2AND3",
-    tags = ["no_pip"],
+    tags = [
+        "no_pip",
+        "notsan",
+    ],
     deps = [
         ":dnn",
         ":head",
@@ -76,11 +79,14 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/python:clip_ops",
+        "//tensorflow/python:framework_ops",
+        "//tensorflow/python:sparse_tensor",
         "//tensorflow/python:training",
         "//tensorflow/python:util",
         "//tensorflow/python/estimator",
         "//tensorflow/python/estimator:model_fn",
         "//tensorflow/python/estimator:util",
+        "@six_archive//:six",
     ],
 )
 
@@ -96,10 +102,11 @@ py_test(
         "//tensorflow/python:constant_op",
         "//tensorflow/python:framework_ops",
         "//tensorflow/python:metrics",
+        "//tensorflow/python:sparse_tensor",
         "//tensorflow/python:training",
         "//tensorflow/python:variables",
+        "//tensorflow/python/estimator:estimator_py",
         "//tensorflow/python/estimator:linear",
-        "//tensorflow/python/estimator:run_config",
         "//tensorflow/python/feature_column",
         "//third_party/py/numpy",
     ],

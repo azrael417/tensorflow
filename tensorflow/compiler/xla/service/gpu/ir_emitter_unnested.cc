@@ -50,7 +50,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_opcode.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/fused_ir_emitter.h"
 #include "tensorflow/compiler/xla/service/llvm_ir/llvm_util.h"
-#include "tensorflow/compiler/xla/service/llvm_ir/ops.h"
+#include "tensorflow/compiler/xla/service/llvm_ir/tuple_ops.h"
 #include "tensorflow/compiler/xla/service/name_uniquer.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
@@ -132,11 +132,9 @@ void UpdateLaunchDimensions(const LaunchDimensions& launch_dims, Thunk* thunk,
 
 IrEmitterUnnested::IrEmitterUnnested(const HloModuleConfig& hlo_module_config,
                                      const HloComputation* hlo_computation,
-                                     bool has_hybrid_result,
                                      IrEmitterContext* ir_emitter_context)
     : IrEmitter(hlo_module_config, ir_emitter_context, /*is_nested=*/false),
-      hlo_computation_(hlo_computation),
-      has_hybrid_result_(has_hybrid_result) {
+      hlo_computation_(hlo_computation) {
   // Initialize thunk_sequence_ to an empty list of thunks.
   thunk_sequence_.reset(new ThunkSequence());
 }
@@ -256,27 +254,11 @@ Status IrEmitterUnnested::HandleConvolution(HloInstruction* convolution,
                                       rhs_instruction, window);
 }
 
-namespace {
-
-// Returns the first non-GetTupleElement ancestor instruction of 'hlo'.
-// If the first non-GTE ancestor is tuple-shaped, populates 'index' with the
-// (possibly nested) tuple indices used on the path from ancestor to 'hlo'.
-const HloInstruction* LatestNonGteAncestorAndIndex(const HloInstruction* hlo,
-                                                   ShapeIndex* index) {
-  if (hlo->opcode() == HloOpcode::kGetTupleElement) {
-    const auto* operand = LatestNonGteAncestorAndIndex(hlo->operand(0), index);
-    index->push_back(hlo->tuple_index());
-    return operand;
-  }
-  return hlo;
-}
-
 // Checks if we can emit code for DynamicUpdateSlice to update data in-place.
 // Returns true if operand 0 of DynamicUpdateSlice and its output buffer
 // share the same buffer allocation.
-// Returns false otherwise.
-bool CanUpdateDynamicSliceInPlace(const BufferAssignment& assignment,
-                                  HloInstruction* fusion) {
+static bool CanUpdateDynamicSliceInPlace(const BufferAssignment& assignment,
+                                         HloInstruction* fusion) {
   CHECK_EQ(HloOpcode::kFusion, fusion->opcode());
   HloInstruction* fused_root = fusion->fused_expression_root();
   if (fused_root->opcode() != HloOpcode::kDynamicUpdateSlice) {
@@ -284,17 +266,16 @@ bool CanUpdateDynamicSliceInPlace(const BufferAssignment& assignment,
   }
   // Walk DynamicUpdateSlice operand(0) to fused parameter and get its
   // associated operand. See if it shares an allocation with this operand.
+  HloInstruction* fusion_operand;
   ShapeIndex index;
-  auto* fusion_operand =
-      LatestNonGteAncestorAndIndex(fused_root->operand(0), &index);
+  std::tie(fusion_operand, index) =
+      fused_root->mutable_operand(0)->LatestNonGteAncestorAndIndex();
   if (fusion_operand->opcode() != HloOpcode::kParameter) {
     return false;
   }
   auto* operand = fusion->operand(fusion_operand->parameter_number());
   return assignment.SharesSliceAtIndex(fusion, {}, operand, index);
 }
-
-}  // namespace
 
 Status IrEmitterUnnested::HandleFusion(HloInstruction* fusion) {
   HloInstruction* root = fusion->fused_expression_root();
@@ -388,7 +369,7 @@ Status IrEmitterUnnested::HandleFusion(HloInstruction* fusion) {
     TF_RETURN_IF_ERROR(root->Accept(&fused_emitter));
 
     // Recursively lookup 'fusion_operand' for DynamicUpdateSlice operand 0.
-    auto* fusion_operand = LatestNonGteAncestor(root->operand(0));
+    auto* fusion_operand = root->operand(0)->LatestNonGteAncestor();
     CHECK_EQ(HloOpcode::kParameter, fusion_operand->opcode());
 
     // Operand(0) the input array which shares an allocation with the output.
@@ -1372,13 +1353,6 @@ Status IrEmitterUnnested::HandleTuple(
         tuple_element_buffers, GetAllocationSlice(*tuple), tuple));
     return Status::OK();
   }
-  // If `inst` is a nested thunk that can be disassembled from the result tuple,
-  // GpuExecutable will disassemble it and return it as part of the resultant
-  // ShapedBuffer.
-  if (has_hybrid_result_ &&
-      ReachRootViaOnlyTuples(*tuple, *hlo_computation_->root_instruction())) {
-    return Status::OK();
-  }
   thunk_sequence_->emplace_back(BuildKernelThunk(tuple));
   return IrEmitter::HandleTuple(tuple, operands);
 }
@@ -1634,7 +1608,7 @@ llvm::Function* IrEmitterUnnested::EmitBasePointersForHloAndItsOperands(
   // with their operand buffer in 'io_hlos' and 'non_io_hlos' below.
   std::vector<const HloInstruction*> non_io_hlos;
   for (const HloInstruction* operand : hlo.operands()) {
-    const HloInstruction* to_lookup = LatestNonGteAncestor(operand);
+    const HloInstruction* to_lookup = operand->LatestNonGteAncestor();
     if (buffer_assignment.HasTopLevelAllocation(to_lookup) &&
         buffer_assignment.GetUniqueTopLevelSlice(to_lookup)
             .ConsumeValueOrDie()
@@ -1674,7 +1648,7 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildKernelThunk(
   std::vector<BufferAllocation::Slice> io_buffers;
   io_buffers.reserve(io_hlos.size());
   for (const HloInstruction* io_hlo : io_hlos) {
-    io_buffers.push_back(GetAllocationSlice(*LatestNonGteAncestor(io_hlo)));
+    io_buffers.push_back(GetAllocationSlice(*io_hlo->LatestNonGteAncestor()));
   }
 
   // Create a KernelThunk that launches the kernel that implements "inst".
@@ -1888,14 +1862,12 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildWhileThunk(
   // Generate thunk sequence for while 'condition'.
   HloComputation* condition = hlo->while_condition();
   IrEmitterUnnested ir_emitter_condition(hlo_module_config_, condition,
-                                         /*has_hybrid_result=*/false,
                                          ir_emitter_context_);
   TF_CHECK_OK(condition->root_instruction()->Accept(&ir_emitter_condition));
 
   // Generate thunk sequence for while 'body'.
   HloComputation* body = hlo->while_body();
   IrEmitterUnnested ir_emitter_body(hlo_module_config_, body,
-                                    false /* has_hybrid_result */,
                                     ir_emitter_context_);
   TF_CHECK_OK(body->root_instruction()->Accept(&ir_emitter_body));
 
@@ -1914,7 +1886,6 @@ std::unique_ptr<Thunk> IrEmitterUnnested::BuildForThunk(
   // Generate thunk sequence for while 'body' (will be used a For loop body).
   HloComputation* body = hlo->while_body();
   IrEmitterUnnested ir_emitter_body(hlo_module_config_, body,
-                                    false /* has_hybrid_result */,
                                     ir_emitter_context_);
   TF_CHECK_OK(body->root_instruction()->Accept(&ir_emitter_body));
 

@@ -459,6 +459,11 @@ message MapRequest {
   repeated ComputationDataHandle operands = 2;
   ComputationHandle to_apply = 3;
   repeated ComputationDataHandle static_operands = 4;
+  // The dimensions over which to map.
+  // Example mapping a Dot operation along the batch dimension 0:
+  //   operand0.shape = [2, 2, 2], operand1.shape = [2,2,3]
+  //   Map({operand0, operand1}, Dot, {0})
+  repeated int64 dimensions = 5;
 }
 
 message ReduceRequest {
@@ -613,7 +618,7 @@ enum UnaryOperation {
   UNOP_INVALID = 0;
 
   // Elementwise, logical negation
-  UNOP_LOGICAL_NOT = 1;
+  UNOP_NOT = 1;
 
   // Elementwise, computes e^x.
   UNOP_EXP = 2;
@@ -702,8 +707,8 @@ enum BinaryOperation {
   BINOP_REM = 17;
 
   // Logical operators
-  BINOP_LOGICAL_AND = 18;
-  BINOP_LOGICAL_OR = 19;
+  BINOP_AND = 18;
+  BINOP_OR = 19;
 }
 
 message BinaryOpRequest {

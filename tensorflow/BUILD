@@ -186,6 +186,12 @@ config_setting(
 )
 
 config_setting(
+    name = "with_s3_support",
+    values = {"define": "with_s3_support=true"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
     name = "with_xla_support",
     values = {"define": "with_xla_support=true"},
     visibility = ["//visibility:public"],
@@ -384,6 +390,11 @@ filegroup(
         "//tensorflow/contrib/integrate:all_files",
         "//tensorflow/contrib/keras:all_files",
         "//tensorflow/contrib/kernel_methods:all_files",
+        "//tensorflow/contrib/kfac:all_files",
+        "//tensorflow/contrib/kfac/examples:all_files",
+        "//tensorflow/contrib/kfac/examples/tests:all_files",
+        "//tensorflow/contrib/kfac/python/kernel_tests:all_files",
+        "//tensorflow/contrib/kfac/python/ops:all_files",
         "//tensorflow/contrib/labeled_tensor:all_files",
         "//tensorflow/contrib/layers:all_files",
         "//tensorflow/contrib/layers/kernels:all_files",
@@ -401,6 +412,7 @@ filegroup(
         "//tensorflow/contrib/nn:all_files",
         "//tensorflow/contrib/opt:all_files",
         "//tensorflow/contrib/predictor:all_files",
+        "//tensorflow/contrib/quantize:all_files",
         "//tensorflow/contrib/receptive_field:all_files",
         "//tensorflow/contrib/reduce_slice_ops:all_files",
         "//tensorflow/contrib/remote_fused_graph/pylib:all_files",
@@ -492,7 +504,9 @@ filegroup(
         "//tensorflow/python/keras:all_files",
         "//tensorflow/python/kernel_tests:all_files",
         "//tensorflow/python/kernel_tests/distributions:all_files",
+        "//tensorflow/python/kernel_tests/linalg:all_files",
         "//tensorflow/python/ops/distributions:all_files",
+        "//tensorflow/python/ops/linalg:all_files",
         "//tensorflow/python/profiler:all_files",
         "//tensorflow/python/profiler/internal:all_files",
         "//tensorflow/python/saved_model:all_files",

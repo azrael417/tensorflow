@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/tf2xla/xla_compiler.h"
 
+#include <deque>
 #include <numeric>
 
 #include "tensorflow/compiler/tf2xla/dump_graph.h"
@@ -91,7 +92,6 @@ XlaCompiler::XlaCompiler(XlaCompiler::Options options)
   }
 
   local_flib_def_.reset(new FunctionLibraryDefinition(OpRegistry::Global(),
-
                                                       FunctionDefLibrary{}));
   local_pflr_.reset(new ProcessFunctionLibraryRuntime(
       &device_mgr_, Env::Default(), options.graph_def_version,
@@ -141,8 +141,17 @@ Status XlaCompiler::CompileFunction(
   }
 
   const FunctionBody* fbody;
-  if (!GetFunctionBody(function, local_flib_runtime_, &fbody).ok()) {
-    TF_RETURN_IF_ERROR(GetFunctionBody(function, flib_runtime_, &fbody));
+  // The function may be in either the local_flib_runtime_ or flib_runtime_.
+  // Look up the function in local first and if it is not found then look up the
+  // function in flib_runtime_.
+  auto status = GetFunctionBody(function, local_flib_runtime_, &fbody);
+  if (!status.ok()) {
+    if (!errors::IsNotFound(status)) {
+      return status;
+    }
+    TF_RETURN_WITH_CONTEXT_IF_ERROR(
+        GetFunctionBody(function, flib_runtime_, &fbody),
+        "Local lookup failed with: ", status.error_message());
   }
 
   TF_RETURN_IF_ERROR(CheckSignature(fbody->arg_types, args));
@@ -188,16 +197,18 @@ Status ExecuteGraph(XlaContext* xla_context, std::unique_ptr<Graph> graph,
   // The Executor requires us to use ScopedStepContainer. We wrap it in a
   // unique_ptr so we can capture the cleanup status in the end.
   xla_context->Ref();
-  Status cleanup_status;
+  Status status;
   auto step_container = xla::MakeUnique<ScopedStepContainer>(
-      step_id, [&cleanup_status, device](const string& name) {
-        cleanup_status = device->resource_manager()->Cleanup(name);
+      step_id, [&status, device](const string& name) {
+        status = device->resource_manager()->Cleanup(name);
       });
   TF_RETURN_IF_ERROR(device->resource_manager()->Create(
       step_container->name(), XlaContext::kXlaContextResourceName,
       xla_context));
 
   // Create a LocalExecutor that will own and run the graph.
+  // TODO(b/66947550): migrate away from using an Executor in order to guarantee
+  // determinism and thread-safety.
   LocalExecutorParams exec_params;
   exec_params.device = device;
   exec_params.function_library = flib;
@@ -214,15 +225,36 @@ Status ExecuteGraph(XlaContext* xla_context, std::unique_ptr<Graph> graph,
   Executor::Args exec_args;
   exec_args.step_id = step_id;
   exec_args.step_container = step_container.get();
-  // Run all compilation kernels on the main thread.
-  exec_args.runner = [](Executor::Args::Closure c) { c(); };
+
+  // Pushes closures to run onto `worklist`. We don't run the closures directly
+  // from 'runner' since that might lead to a stack overflow for large graphs.
+  std::deque<Executor::Args::Closure> worklist;
+  exec_args.runner = [&](Executor::Args::Closure c) {
+    worklist.push_back(std::move(c));
+  };
+
+  // The following code assumes there is only one thread involved and no
+  // concurrency, because we did not provide Executor a threaded runner. Async
+  // ops on the XlaCompilation device must not use threads or concurrency
+  // internally.
+  bool done = false;
+  exec->RunAsync(exec_args, [&](const Status& s) {
+    status = s;
+    done = true;
+  });
+  // Repeatedly run closures from the worklist until `done` is signalled.
+  while (!done) {
+    TF_RET_CHECK(!worklist.empty());
+    Executor::Args::Closure& c = worklist.front();
+    c();
+    worklist.pop_front();
+  }
   TF_RETURN_WITH_CONTEXT_IF_ERROR(
-      exec->Run(exec_args),
-      "Conversion from TensorFlow graph to XLA computation failed.");
+      status, "Conversion from TensorFlow graph to XLA computation failed.");
 
   // Explicitly clean up the step container, to capture the cleanup status.
   step_container.reset();
-  return cleanup_status;
+  return status;
 }
 
 // Builds XLA computations for each of the arguments to the computation.
@@ -485,7 +517,7 @@ Status XlaCompiler::CompileGraph(const XlaCompiler::CompileOptions& options,
   result->requires_runtime_context = context->has_context_parameter();
 
   // Tuple arguments and runtime context parameters are incompatible.
-  CHECK(!(options.use_tuple_arg && result->requires_runtime_context));
+  TF_RET_CHECK(!(options.use_tuple_arg && result->requires_runtime_context));
 
   VLOG(2) << "Outputs: total: " << context->retvals().size()
           << " nonconstant: " << num_nonconst_outputs;
@@ -522,7 +554,8 @@ Status XlaCompiler::CompileGraph(const XlaCompiler::CompileOptions& options,
        i < context->retvals().size(); ++i) {
     const XlaExpression& retval = context->retvals()[i];
     if (!retval.has_constant_value()) {
-      CHECK_LT(computation_output, num_computation_outputs);
+      TF_RET_CHECK(computation_output < num_computation_outputs)
+          << "Computation has more outputs than expected";
       OutputDescription& output = result->outputs[i];
       output.is_constant = false;
       TF_RETURN_IF_ERROR(XLAShapeToTensorShape(

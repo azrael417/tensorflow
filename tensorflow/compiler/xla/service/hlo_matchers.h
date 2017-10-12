@@ -79,9 +79,9 @@ HLO_MATCHER(Infeed);
 HLO_MATCHER(IsFinite);
 HLO_MATCHER(Le);
 HLO_MATCHER(Log);
-HLO_MATCHER(LogicalAnd);
-HLO_MATCHER(LogicalNot);
-HLO_MATCHER(LogicalOr);
+HLO_MATCHER(And);
+HLO_MATCHER(Not);
+HLO_MATCHER(Or);
 HLO_MATCHER(Lt);
 HLO_MATCHER(Map);
 HLO_MATCHER(Maximum);
@@ -130,13 +130,8 @@ std::vector<const HloInstruction*> Pointers(const Container& container) {
 
 // Tell GMock to print HloInstruction* by value, so error messages are nice.
 // Has to be in the same namespace as 'HloInstruction'.
-void PrintTo(const HloInstruction* inst, ::std::ostream* os) {
-  *os << (inst ? inst->ToString() : "nullptr");
-}
-
-void PrintTo(HloInstruction* inst, ::std::ostream* os) {
-  PrintTo(const_cast<const HloInstruction*>(inst), os);
-}
+void PrintTo(const HloInstruction* inst, ::std::ostream* os);
+void PrintTo(HloInstruction* inst, ::std::ostream* os);
 
 }  // namespace xla
 

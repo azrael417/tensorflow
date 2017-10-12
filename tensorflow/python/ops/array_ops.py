@@ -124,7 +124,13 @@ def identity(input, name=None):  # pylint: disable=redefined-builtin
   if context.in_graph_mode():
     return gen_array_ops.identity(input, name=name)
   else:
-    if context.context().device_name != input.device:
+    try:
+      in_device = input.device
+    except AttributeError:
+      input = ops.convert_to_tensor(input)
+      in_device = input.device
+    # TODO(ashankar): Does 'identity' need to invoke execution callbacks?
+    if context.context().device_name != in_device:
       return input._copy()  # pylint: disable=protected-access
     return input
 
@@ -857,7 +863,7 @@ def stack(values, axis=0, name="stack"):
   This is the opposite of unstack.  The numpy equivalent is
 
   ```python
-  tf.stack([x, y, z]) = np.asarray([x, y, z])
+  tf.stack([x, y, z]) = np.stack([x, y, z])
   ```
 
   Args:
@@ -997,7 +1003,7 @@ def unstack(value, num=None, axis=0, name="unstack"):
 
   This is the opposite of stack.  The numpy equivalent is
 
-      tf.unstack(x, n) = list(x)
+      tf.unstack(x, n) = np.unstack(x)
 
   Args:
     value: A rank `R > 0` `Tensor` to be unstacked.
@@ -2098,6 +2104,20 @@ def space_to_batch(input, paddings, block_size, name=None):  # pylint: disable=r
 space_to_batch.__doc__ = gen_array_ops._space_to_batch.__doc__
 
 
+def space_to_depth(input, block_size, name=None, data_format="NHWC"):  # pylint: disable=redefined-builtin
+  return gen_array_ops.space_to_depth(input, block_size, data_format, name=name)
+
+
+space_to_depth.__doc__ = gen_array_ops.space_to_depth.__doc__
+
+
+def depth_to_space(input, block_size, name=None, data_format="NHWC"):  # pylint: disable=redefined-builtin
+  return gen_array_ops.depth_to_space(input, block_size, data_format, name=name)
+
+
+depth_to_space.__doc__ = gen_array_ops.depth_to_space.__doc__
+
+
 def batch_to_space(input, crops, block_size, name=None):  # pylint: disable=redefined-builtin
   result = batch_to_space_nd(
       input,
@@ -2422,7 +2442,9 @@ def where(condition, x=None, y=None, name=None):
     ValueError: When exactly one of `x` or `y` is non-None.
   """
   if x is None and y is None:
-    return gen_array_ops.where(input=condition, name=name)
+    with ops.name_scope(name, "Where", [condition]) as name:
+      condition = ops.convert_to_tensor(condition, dtype=dtypes.bool)
+      return gen_array_ops.where(input=condition, name=name)
   elif x is not None and y is not None:
     return gen_math_ops._select(condition=condition, t=x, e=y, name=name)
   else:

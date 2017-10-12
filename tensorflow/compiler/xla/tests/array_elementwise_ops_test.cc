@@ -496,54 +496,54 @@ XLA_TEST_F(ArrayElementwiseOpTest, MulTwoConstantU32s) {
   ComputeAndCompareR1<uint32>(&builder, expected, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalAnd) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanAnd) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({false, false, true, true});
   auto b = builder.ConstantR1<bool>({false, true, false, true});
-  auto out = builder.LogicalAnd(a, b);
+  auto out = builder.And(a, b);
 
   ComputeAndCompareR1<bool>(&builder, {false, false, false, true}, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalAndZeroElement) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanAndZeroElement) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({});
   auto b = builder.ConstantR1<bool>({});
-  auto out = builder.LogicalAnd(a, b);
+  auto out = builder.And(a, b);
 
   ComputeAndCompareR1<bool>(&builder, {}, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalOr) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanOr) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({false, false, true, true});
   auto b = builder.ConstantR1<bool>({false, true, false, true});
-  auto out = builder.LogicalOr(a, b);
+  auto out = builder.Or(a, b);
 
   ComputeAndCompareR1<bool>(&builder, {false, true, true, true}, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalOrZeroElement) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanOrZeroElement) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({});
   auto b = builder.ConstantR1<bool>({});
-  auto out = builder.LogicalOr(a, b);
+  auto out = builder.Or(a, b);
 
   ComputeAndCompareR1<bool>(&builder, {}, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalNot) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanNot) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({false, true, true, false});
-  auto out = builder.LogicalNot(a);
+  auto out = builder.Not(a);
 
   ComputeAndCompareR1<bool>(&builder, {true, false, false, true}, {});
 }
 
-XLA_TEST_F(ArrayElementwiseOpTest, LogicalNotZeroElement) {
+XLA_TEST_F(ArrayElementwiseOpTest, BooleanNotZeroElement) {
   ComputationBuilder builder(client_, TestName());
   auto a = builder.ConstantR1<bool>({});
-  auto out = builder.LogicalNot(a);
+  auto out = builder.Not(a);
 
   ComputeAndCompareR1<bool>(&builder, {}, {});
 }
@@ -2140,6 +2140,33 @@ XLA_TEST_F(ArrayElementwiseOpTest, CannotAddOpaques) {
   EXPECT_THAT(computation_status.status().ToString(),
               ::testing::ContainsRegex(
                   "Expected non-opaque argument for lhs of binary operation"));
+}
+
+XLA_TEST_F(ArrayElementwiseOpTest, IdentityBroadcastOfSameRankIsAllowed) {
+  ComputationBuilder builder(client_, TestName());
+  auto a =
+      builder.ConstantR2<float>({{-2.5f, 3.14f, 1.0f}, {2.25f, -10.0f, 3.33f}});
+  auto b =
+      builder.ConstantR2<float>({{-1.5f, 8.14f, 42.0}, {-1.0f, -4.0f, 5.55f}});
+  auto add = builder.Add(a, b, /*broadcast_dimensions=*/{0, 1});
+
+  Array2D<float> expected_array(
+      {{-4.0f, 11.28f, 43.0f}, {1.25f, -14.0f, 8.88f}});
+  ComputeAndCompareR2<float>(&builder, expected_array, {}, error_spec_);
+}
+
+XLA_TEST_F(ArrayElementwiseOpTest, NonIdentityBroadcastOfSameRankIsDisallowed) {
+  ComputationBuilder builder(client_, TestName());
+  auto a =
+      builder.ConstantR2<float>({{-2.5f, 3.14f, 1.0f}, {2.25f, -10.0f, 3.33f}});
+  auto b =
+      builder.ConstantR2<float>({{-1.5f, 8.14f, 42.0}, {-1.0f, -4.0f, 5.55f}});
+  auto add = builder.Add(a, b, /*broadcast_dimensions=*/{1, 0});
+
+  StatusOr<Computation> computation_status = builder.Build();
+  ASSERT_FALSE(computation_status.ok());
+  EXPECT_THAT(computation_status.status().error_message(),
+              ::testing::ContainsRegex("must.*be the identity"));
 }
 
 // Regression test for b/31927799. "slice - y" is fused and requires implicit

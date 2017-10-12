@@ -255,12 +255,11 @@ class HloEvaluator::TypedVisitor : public DfsHloVisitorWithDefault {
     return Status::OK();
   };
 
-  Status HandleLogicalNot(HloInstruction* logical_not,
-                          HloInstruction* operand) override {
-    TF_ASSIGN_OR_RETURN(
-        parent_->evaluated_[logical_not],
-        ElementWiseUnaryOp(logical_not,
-                           [](ReturnT elem_operand) { return !elem_operand; }));
+  Status HandleNot(HloInstruction* not_, HloInstruction* operand) override {
+    TF_ASSIGN_OR_RETURN(parent_->evaluated_[not_],
+                        ElementWiseUnaryOp(not_, [](ReturnT elem_operand) {
+                          return !elem_operand;
+                        }));
     return Status::OK();
   };
 
@@ -368,21 +367,21 @@ class HloEvaluator::TypedVisitor : public DfsHloVisitorWithDefault {
     return Status::OK();
   };
 
-  Status HandleLogicalAnd(HloInstruction* logical_and, HloInstruction* lhs,
-                          HloInstruction* rhs) override {
+  Status HandleAnd(HloInstruction* and_, HloInstruction* lhs,
+                   HloInstruction* rhs) override {
     TF_ASSIGN_OR_RETURN(
-        parent_->evaluated_[logical_and],
-        ElementWiseBinaryOp(logical_and, [](ReturnT lhs_el, ReturnT rhs_el) {
+        parent_->evaluated_[and_],
+        ElementWiseBinaryOp(and_, [](ReturnT lhs_el, ReturnT rhs_el) {
           return lhs_el && rhs_el;
         }));
     return Status::OK();
   };
 
-  Status HandleLogicalOr(HloInstruction* logical_or, HloInstruction* lhs,
-                         HloInstruction* rhs) override {
+  Status HandleOr(HloInstruction* or_, HloInstruction* lhs,
+                  HloInstruction* rhs) override {
     TF_ASSIGN_OR_RETURN(
-        parent_->evaluated_[logical_or],
-        ElementWiseBinaryOp(logical_or, [](ReturnT lhs_el, ReturnT rhs_el) {
+        parent_->evaluated_[or_],
+        ElementWiseBinaryOp(or_, [](ReturnT lhs_el, ReturnT rhs_el) {
           return lhs_el || rhs_el;
         }));
     return Status::OK();
@@ -1263,6 +1262,39 @@ std::unique_ptr<Literal> HloEvaluator::TryEvaluate(
   }
 
   return result_or.ConsumeValueOrDie();
+}
+
+StatusOr<std::unique_ptr<Literal>> HloEvaluator::EvaluateWithSubstitutions(
+    const HloInstruction* instruction,
+    const std::unordered_map<const HloInstruction*, const Literal*>&
+        substitutions) {
+  std::vector<std::unique_ptr<HloInstruction>> owned_operands;
+  for (const HloInstruction* operand : instruction->operands()) {
+    auto it = substitutions.find(operand);
+    if (it == substitutions.end()) {
+      owned_operands.push_back(operand->Clone());
+    } else {
+      owned_operands.push_back(
+          HloInstruction::CreateConstant(it->second->CloneToUnique()));
+    }
+  }
+
+  std::vector<HloInstruction*> operands;
+  for (auto& operand : owned_operands) {
+    operands.push_back(operand.get());
+  }
+
+  std::unique_ptr<HloInstruction> cloned_instruction =
+      instruction->CloneWithNewOperands(instruction->shape(), operands);
+  auto result = Evaluate(cloned_instruction.get());
+
+  // Clean up our cloned instructions before returning.
+  cloned_instruction->DetachFromOperands();
+  for (auto& operand : owned_operands) {
+    operand->DetachFromOperands();
+  }
+
+  return result;
 }
 
 Status HloEvaluator::HandleParameter(HloInstruction* parameter) {
