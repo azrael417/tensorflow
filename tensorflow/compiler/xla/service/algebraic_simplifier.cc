@@ -98,11 +98,11 @@ bool ReshapeIsBitcast(
 HloComputation* CreateScalarBinaryComputation(HloModule* module,
                                               PrimitiveType primitive_type,
                                               HloOpcode opcode) {
-  HloComputation::Builder b("scalar computation");
+  HloComputation::Builder b("scalar_computation");
   auto scalar_lhs = b.AddInstruction(HloInstruction::CreateParameter(
-      0, ShapeUtil::MakeShape(F32, {}), "scalar lhs"));
+      0, ShapeUtil::MakeShape(F32, {}), "scalar_lhs"));
   auto scalar_rhs = b.AddInstruction(HloInstruction::CreateParameter(
-      1, ShapeUtil::MakeShape(F32, {}), "scalar rhs"));
+      1, ShapeUtil::MakeShape(F32, {}), "scalar_rhs"));
   auto scalar_op = b.AddInstruction(
       HloInstruction::CreateBinary(ShapeUtil::MakeShape(primitive_type, {}),
                                    opcode, scalar_lhs, scalar_rhs));
@@ -201,17 +201,18 @@ class AlgebraicSimplifierVisitor : public DfsHloVisitorWithDefault {
   static bool Run(
       HloComputation* computation, bool is_layout_sensitive,
       AlgebraicSimplifier::ValidBitcastCallback valid_bitcast_callback,
-      bool enable_dot_simplification);
+      bool enable_dot_simplification, bool enable_conv_simplification);
 
  private:
   explicit AlgebraicSimplifierVisitor(
       HloComputation* computation, bool is_layout_sensitive,
       AlgebraicSimplifier::ValidBitcastCallback valid_bitcast_callback,
-      bool enable_dot_simplification)
+      bool enable_dot_simplification, bool enable_conv_simplification)
       : computation_(computation),
         is_layout_sensitive_(is_layout_sensitive),
         valid_bitcast_callback_(std::move(valid_bitcast_callback)),
-        enable_dot_simplification_(enable_dot_simplification) {}
+        enable_dot_simplification_(enable_dot_simplification),
+        enable_conv_simplification_(enable_conv_simplification) {}
 
   // Convenience method for replacing an instruction with a bitcast.
   void ReplaceWithBitcast(HloInstruction* instruction);
@@ -287,15 +288,18 @@ class AlgebraicSimplifierVisitor : public DfsHloVisitorWithDefault {
 
   // Disable dot simplication on platforms where it causes a slowdown.
   bool enable_dot_simplification_;
+
+  // Disable convolution simplication on platforms where it causes a slowdown.
+  bool enable_conv_simplification_;
 };
 
 bool AlgebraicSimplifierVisitor::Run(
     HloComputation* computation, bool is_layout_sensitive,
     AlgebraicSimplifier::ValidBitcastCallback valid_bitcast_callback,
-    bool enable_dot_simplification) {
-  AlgebraicSimplifierVisitor visitor(computation, is_layout_sensitive,
-                                     std::move(valid_bitcast_callback),
-                                     enable_dot_simplification);
+    bool enable_dot_simplification, bool enable_conv_simplification) {
+  AlgebraicSimplifierVisitor visitor(
+      computation, is_layout_sensitive, std::move(valid_bitcast_callback),
+      enable_dot_simplification, enable_conv_simplification);
   TF_CHECK_OK(computation->Accept(&visitor));
   return visitor.changed_;
 }
@@ -1459,6 +1463,9 @@ Status AlgebraicSimplifierVisitor::HandleTranspose(HloInstruction* transpose) {
 Status AlgebraicSimplifierVisitor::HandleConvolution(
     HloInstruction* convolution, HloInstruction* lhs, HloInstruction* rhs,
     const Window& window) {
+  if (!enable_conv_simplification_) {
+    return Status::OK();
+  }
   // HandleConvolution tries to replace a convolution with a DOT instruction.
   //
   // Only add when bitcasts can be used:
@@ -1511,7 +1518,10 @@ Status AlgebraicSimplifierVisitor::HandleConvolution(
   // still convert Conv into more efficient Matmul with operand transposition
   // (such as the transposition flags in cuBLAS SGEMM).
   if (!LayoutUtil::Equal(input_shape.layout(), convolution_shape.layout()) ||
-      input_shape.layout().minor_to_major(0) != dnums.feature_dimension() ||
+      input_shape.layout().minor_to_major(0) !=
+          dnums.input_feature_dimension() ||
+      convolution_shape.layout().minor_to_major(0) !=
+          dnums.output_feature_dimension() ||
       // The input feature dimension should come later in the minor-to-major
       // order.
       (PositionInContainer(filter_shape.layout().minor_to_major(),
@@ -1530,14 +1540,14 @@ Status AlgebraicSimplifierVisitor::HandleConvolution(
 
   // Replace it with a dot, with bitcasts around it to get the right shape.
   const int64 input_channels =
-      input_shape.dimensions(dnums.feature_dimension());
+      input_shape.dimensions(dnums.input_feature_dimension());
   const int64 output_channels =
       filter_shape.dimensions(dnums.kernel_output_feature_dimension());
 
   // Computes the product of the non-feature dimensions.
   int64 conv_width = 1;
   for (int i = 0; i < input_shape.dimensions_size(); ++i) {
-    if (i != dnums.feature_dimension()) {
+    if (i != dnums.input_feature_dimension()) {
       conv_width *= input_shape.dimensions(i);
     }
   }
@@ -1959,9 +1969,9 @@ StatusOr<bool> AlgebraicSimplifier::Run(HloModule* module) {
                  "AlgebraicSimplifier::Run(), before:\n" + module->ToString());
   bool changed = false;
   for (auto* comp : module->MakeNonfusionComputations()) {
-    if (AlgebraicSimplifierVisitor::Run(comp, is_layout_sensitive_,
-                                        valid_bitcast_callback_,
-                                        enable_dot_simplification_)) {
+    if (AlgebraicSimplifierVisitor::Run(
+            comp, is_layout_sensitive_, valid_bitcast_callback_,
+            enable_dot_simplification_, enable_conv_simplification_)) {
       changed = true;
     }
   }
