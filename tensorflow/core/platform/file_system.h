@@ -269,7 +269,7 @@ class HDF5File {
  public:
   HDF5File() { filename_ = ""; }
   HDF5File(const string& fname, const hid_t& fapl_id);
-  virtual ~HDF5File();
+  ~HDF5File();
   
   /// \brief The read function takes a dataset name to read from as well as
   /// a row_number to specify the corresponding row to read.

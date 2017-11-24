@@ -34,7 +34,6 @@ namespace tensorflow {
     HDF5Reader(const string& node_name, std::vector<string> datasets, Env* env) : ReaderBase(strings::StrCat("HDF5Reader '", node_name, "'")), 
     env_(env), datasets_(datasets){}
 
-
     ~HDF5Reader(){}
 
 
@@ -56,7 +55,6 @@ namespace tensorflow {
 
 
     Status ReadLocked(string* key, string* value, bool* produced, bool* at_end) override {
-
       //reached the end of the file
       Status s = reader_->ReadRecord(value);
       if (errors::IsOutOfRange(s)) {
@@ -88,8 +86,8 @@ namespace tensorflow {
   private:
     Env* const env_;
     std::vector<string> datasets_;
-    std::unique_ptr<HDF5File> file_;
-    std::unique_ptr<io::HDF5Reader> reader_;
+    std::unique_ptr<HDF5File> file_ GUARDED_BY(mu_);
+    std::unique_ptr<io::HDF5Reader> reader_ GUARDED_BY(mu_);
   };
 
 

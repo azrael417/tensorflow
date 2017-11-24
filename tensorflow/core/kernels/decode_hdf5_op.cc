@@ -32,7 +32,7 @@ namespace tensorflow {
     //make them flat out:
     auto records_t = records->flat<string>();
     int64 records_size = records_t.size();
-  
+
     std::vector<HDF5File::DatasetInfo> recs;
     for (int64 i = 0; i < records_size; ++i) {
       std::vector<HDF5File::DatasetInfo> tmprecs = ParseRecord(records_t(i));
@@ -76,6 +76,12 @@ namespace tensorflow {
         }
       }
     }
+    
+    //clean up:
+    for(unsigned int i=0; i<recs.size(); i++){
+      H5Tclose(recs[i].type);
+    }
+    return;
   }
 
   //the format is:
